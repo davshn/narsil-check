@@ -1,0 +1,6 @@
+{
+  "name": "upgrade-mod",
+  "description": "A side pane that lists which libraries of the project can be upgraded",
+  "owner": { "name": "Davshn" },
+  "plugins": [{ "name": "upgrade-mod", "source": "./" }]
+}

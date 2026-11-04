@@ -1,0 +1,6 @@
+# Written by Claude Code when it loads the mod: the API types for the editor.
+.claude-plugin/types/
+node_modules/
+
+# Local skill registry gentle-ai generates: machine-specific paths.
+.atl/

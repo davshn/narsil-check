@@ -1,0 +1,77 @@
+// What the hooks module keeps in $.state and $.store: the type contract
+// `claude plugin validate` holds every key to.
+
+// `bump`: a patch or minor jump, usually a version change and nothing more.
+// `review`: a major jump, whose breaking changes need reading.
+// `expo`: outside the range the project's Expo SDK supports.
+// `blocked`: the new version and the installed packages disagree on a peer
+// dependency, so it cannot go up alone.
+export type Group = 'bump' | 'review' | 'expo' | 'blocked'
+
+export type Upgrade = {
+  name: string
+  ecosystem: 'npm'
+  // The range package.json declares, whose prefix (^, ~) an upgrade keeps.
+  spec: string
+  current: string
+  latest: string
+  bump: 'patch' | 'minor' | 'major'
+  isDev: boolean
+  group: Group
+  // Each peer dependency the upgrade breaks, in words: what blocks it.
+  conflicts: string[]
+}
+
+export type Scan =
+  | { status: 'idle' }
+  | { status: 'scanning' }
+  | { status: 'none' }
+  | { status: 'error'; message: string }
+  | { status: 'done'; upgrades: Upgrade[]; held: number; checked: number; failed: number; at: number }
+
+// An upgrade the pane runs: the package manager's install of the bump group.
+export type Job =
+  | { status: 'idle' }
+  | { status: 'running'; manager: string; count: number }
+  | { status: 'failed'; message: string }
+  | { status: 'upgraded'; count: number; at: number }
+
+// Upgraded ranges git shows uncommitted in package.json, and the files that
+// hold them (package.json and its lockfile).
+// `branch` is the one checked out; `isMain` whether it is the default branch,
+// where the changes go to a new branch and a PR instead of a plain push.
+export type Pending = {
+  changes: { name: string; from: string; to: string }[]
+  files: string[]
+  manager: string
+  branch: string
+  isMain: boolean
+}
+
+// Turning the pending changes into a commit and a push, and from the default
+// branch also a new branch and a PR (`url`).
+export type Pr =
+  | { status: 'idle' }
+  | { status: 'running'; step: string }
+  | { status: 'failed'; message: string }
+  | { status: 'done'; branch: string; url?: string }
+
+// Haiku's reading of why a major upgrade is not a plain bump, per jump
+// ("name@from->to"): asked once and kept.
+export type Difficulty = 'baja' | 'media' | 'alta'
+export type Explained =
+  | { status: 'loading' }
+  | { status: 'done'; difficulty: Difficulty; text: string }
+  | { status: 'failed'; text: string }
+
+declare module 'claude-code' {
+  interface PluginState {
+    'upgrade-mod': {
+      scan: Shaped<Scan>
+      job: Shaped<Job>
+      pending: Shaped<Pending>
+      pr: Shaped<Pr>
+      reasons: Shaped<Record<string, Explained>>
+    }
+  }
+}
