@@ -8,6 +8,7 @@ import { GO } from './golang'
 import { MAVEN } from './maven'
 import { NUGET } from './nuget'
 import { PUB } from './pub'
+import { RUBYGEMS } from './rubygems'
 import { PYPI } from './pypi'
 import { LOCKFILES, MANIFEST, installArgv, latestOf, latestUrl, managerOf, parseManifest, lockedVersion } from './npm'
 
@@ -40,7 +41,7 @@ export const NPM: Adapter = {
   },
 }
 
-export const ADAPTERS: Adapter[] = [NPM, PYPI, GO, CARGO, PUB, MAVEN, NUGET]
+export const ADAPTERS: Adapter[] = [NPM, PYPI, GO, CARGO, PUB, MAVEN, NUGET, RUBYGEMS]
 
 export function adapterOf(id: Ecosystem): Adapter {
   return ADAPTERS.find(a => a.id === id) ?? NPM
