@@ -6,7 +6,8 @@ import { baseOf, bumpOf, parseVersion, satisfies } from '../hooks/semver'
 import type { Version } from '../hooks/semver'
 import { installArgv, installedFromManifest, isExactPin, latestUrl, managerOf, parseManifest, peerConflicts, pinConflicts, rangeFor, upgradeOf } from '../hooks/npm'
 import type { Installed } from '../hooks/npm'
-import { branchName, changesOf, commitTitle, isMainBranch, prUrlOf } from '../hooks/git'
+import { branchName, commitTitle, isMainBranch, prUrlOf } from '../hooks/git'
+import { specChanges } from '../hooks/ecosystems'
 import { sortUpgrades, summaryOf } from '../hooks/words'
 import { breakingVersions, changelogSince, copyText, importPattern, parseReason, releaseTags, repoOf } from '../hooks/explain'
 
@@ -312,27 +313,24 @@ test('a scan an earlier version stored is declined', async ($, on) => {
   await ui.unmount()
 })
 
-const DIFF = [
-  'diff --git a/package.json b/package.json',
-  '--- a/package.json',
-  '+++ b/package.json',
-  '@@ -3 +3 @@',
-  '-  "version": "1.0.0",',
-  '+  "version": "1.0.1",',
-  '@@ -12,2 +12,2 @@',
-  '-    "react": "^19.3.0",',
-  '-    "zod": "^3.22.0"',
-  '+    "react": "^19.3.1",',
-  '+    "zod": "^3.25.1"',
-].join('\n')
 
-test('the pending upgrades are read from git diff', () => {
-  // The project's own "version" changed too, but it is not a dependency.
-  expect(changesOf(DIFF, ['react', 'zod', 'lodash'])).toEqual([
+test('the pending upgrades are the ranges that changed since HEAD', () => {
+  const before = [
+    { name: 'react', spec: '^19.3.0', isDev: false },
+    { name: 'zod', spec: '^3.22.0', isDev: false },
+    { name: 'lodash', spec: '^4.17.21', isDev: false },
+  ]
+  const after = [
+    { name: 'zod', spec: '^3.25.1', isDev: false },
+    { name: 'react', spec: '^19.3.1', isDev: false },
+    { name: 'lodash', spec: '^4.17.21', isDev: false },
+    // Added since HEAD: not an upgrade.
+    { name: 'dayjs', spec: '^1.11.0', isDev: false },
+  ]
+  expect(specChanges(before, after)).toEqual([
     { name: 'react', from: '^19.3.0', to: '^19.3.1' },
     { name: 'zod', from: '^3.22.0', to: '^3.25.1' },
   ])
-  expect(changesOf('', ['react'])).toEqual([])
   expect(commitTitle([{ name: 'a', from: '1', to: '2' }])).toBe('chore(deps): upgrade 1 dependency')
 })
 
@@ -390,6 +388,12 @@ test('on a work branch the button commits and pushes to it, with no new branch o
   await ui.unmount()
 })
 
+// package.json as HEAD holds it, before react and zod went up.
+const HEAD_MANIFEST = JSON.stringify({
+  dependencies: { react: '^18.0.0', zod: '^3.20.0', lodash: '^4.17.21' },
+  devDependencies: { typescript: '~5.4.0' },
+})
+
 // A git repository and gh, standing for the host: answers each command and
 // records it.
 function host(on: On, failAt?: string, current = 'main') {
@@ -400,7 +404,8 @@ function host(on: On, failAt?: string, current = 'main') {
     ran.push(argv)
     const line = argv.join(' ')
     if (failAt && line.startsWith(failAt)) return done('', 1)
-    if (line.startsWith('git --no-pager diff')) return done(DIFF)
+    // HEAD holds the ranges before the upgrade: react and zod moved since.
+    if (line.startsWith('git --no-pager show HEAD:package.json')) return done(HEAD_MANIFEST)
     if (line.startsWith('git status')) return done(' M package.json\n M package-lock.json\n')
     if (line.startsWith('git branch --show-current')) return done(`${current}\n`)
     if (line.startsWith('git symbolic-ref')) return done('origin/main\n')

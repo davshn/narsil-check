@@ -11,7 +11,6 @@ import {
   changelogUrl,
   clip,
   copyText,
-  importPattern,
   parseReason,
   prompt,
   reasonKey,
@@ -20,10 +19,12 @@ import {
   repoOf,
 } from './explain'
 import type { Reason } from './explain'
-import { branchName, changesOf, commitBody, commitTitle, isMainBranch, prBody, prUrlOf } from './git'
-import { EXPO_TABLE, LOCK, LOCKFILES, MANIFEST, expoTableUrl, installArgv, installedFromManifest, installedOf, latestOf, latestUrl, managerOf, parseManifest, peerConflicts, pinConflicts, upgradeOf, versionUrl } from './npm'
+import { ADAPTERS, NPM, adapterOf, manifestOf, specChanges } from './ecosystems'
+import type { Adapter, Dep, Files } from './ecosystems'
+import { branchName, commitBody, commitTitle, isMainBranch, prBody, prUrlOf } from './git'
+import { EXPO_TABLE, LOCK, MANIFEST, expoTableUrl, installedFromManifest, installedOf, latestUrl, parseManifest, peerConflicts, pinConflicts, upgradeOf, versionUrl } from './npm'
 import type { Declared, Found, Installed } from './npm'
-import { parseVersion, show } from './semver'
+import { baseOf, bumpOf, parseVersion, show } from './semver'
 import { COMMAND, GROUPS, PANE, TITLE, agoLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, reasonLine, sortUpgrades, summaryOf, tail } from './words'
 
 // Change a tag when its type's fields change: it declines what an earlier
@@ -59,16 +60,53 @@ async function readJson($: EngineInterface, path: string): Promise<unknown> {
   }
 }
 
-// The latest release on npm, from the store while it is fresh.
-async function latestOnNpm($: EngineInterface, name: string, isFresh: boolean): Promise<string | undefined> {
-  const key = `npm:${name}`
+// The latest release in an ecosystem's registry, from the store while it is
+// fresh. Where the registry's latest stays within a major (Go), the next
+// major's address is asked too.
+async function latestIn($: EngineInterface, adapter: Adapter, name: string, current: string, isFresh: boolean): Promise<string | undefined> {
+  const key = `${adapter.id}:${name}`
   const cached = (await $.store.get(key)) as Cached | undefined
   if (!isFresh && cached && Date.now() - cached.at < CACHE_MS) return cached.version
-  const res = await $.http.fetch(latestUrl(name), { headers: { accept: 'application/json' } })
+  const res = await $.http.fetch(adapter.latestUrl(name), { headers: adapter.headers ?? {} })
   if (!res.ok) return undefined
-  const version = latestOf(res.text)
+  let version = adapter.latestOf(res.text)
+  const next = adapter.nextMajorUrl?.(name, current)
+  if (next) {
+    const major = await fetchText($, next, adapter.headers)
+    const found = major ? adapter.latestOf(major) : undefined
+    if (found) version = found
+  }
   if (version) await $.store.set(key, { version, at: Date.now() } satisfies Cached)
   return version
+}
+
+// Which of an adapter's manifests and lockfiles the project has.
+async function presentOf($: EngineInterface, adapter: Adapter): Promise<string[]> {
+  const present: string[] = []
+  for (const file of [...adapter.manifests, ...adapter.lockfiles]) if (await $.fs.exists(file)) present.push(file)
+  return present
+}
+
+async function readFiles($: EngineInterface, paths: string[]): Promise<Files> {
+  const files: Files = {}
+  for (const path of paths) {
+    try {
+      files[path] = await $.fs.read(path)
+    } catch {
+      // Too large or unreadable: the adapter does without it.
+    }
+  }
+  return files
+}
+
+// The ecosystems the project uses: each adapter whose manifest is there.
+async function detected($: EngineInterface): Promise<{ adapter: Adapter; present: string[] }[]> {
+  const found: { adapter: Adapter; present: string[] }[] = []
+  for (const adapter of ADAPTERS) {
+    const present = await presentOf($, adapter)
+    if (manifestOf(adapter, present)) found.push({ adapter, present })
+  }
+  return found
 }
 
 async function fetchText($: EngineInterface, url: string, headers: Record<string, string> = {}): Promise<string | undefined> {
@@ -83,9 +121,16 @@ async function fetchText($: EngineInterface, url: string, headers: Record<string
 // The release notes of the versions that break between the two: each one's
 // GitHub release, else the package's CHANGELOG since the installed version.
 async function releaseNotes($: EngineInterface, u: Upgrade): Promise<string> {
-  const installed = await readJson($, `node_modules/${u.name}/package.json`)
-  const manifest = repoOf(installed) ? installed : JSON.parse((await fetchText($, latestUrl(u.name))) ?? '{}')
-  const repo = repoOf(manifest)
+  const adapter = adapterOf(u.ecosystem)
+  let repo: { owner: string; repo: string } | undefined
+  if (u.ecosystem === 'npm') {
+    const installed = await readJson($, `node_modules/${u.name}/package.json`)
+    repo = repoOf(installed) ?? repoOf(JSON.parse((await fetchText($, latestUrl(u.name))) ?? '{}'))
+  } else {
+    const text = await fetchText($, adapter.latestUrl(u.name), adapter.headers)
+    const url = text ? adapter.repoUrlOf(text) : undefined
+    repo = url ? repoOf({ repository: url }) : undefined
+  }
   const parts: string[] = []
   if (repo) {
     for (const version of breakingVersions(u.current, u.latest)) {
@@ -99,7 +144,8 @@ async function releaseNotes($: EngineInterface, u: Upgrade): Promise<string> {
       }
     }
   }
-  if (parts.length === 0) {
+  // unpkg serves npm packages' files only.
+  if (parts.length === 0 && u.ecosystem === 'npm') {
     const changelog = await fetchText($, changelogUrl(u.name, u.latest))
     if (changelog) parts.push(changelogSince(changelog, u.current))
   }
@@ -107,9 +153,9 @@ async function releaseNotes($: EngineInterface, u: Upgrade): Promise<string> {
 }
 
 // Where the project imports the library: the files and their import lines.
-async function usageOf($: EngineInterface, name: string): Promise<{ files: number; lines: string[] }> {
+async function usageOf($: EngineInterface, u: Upgrade): Promise<{ files: number; lines: string[] }> {
   try {
-    const ran = await $.process.run(['git', '--no-pager', 'grep', '-n', '-I', '-E', importPattern(name), '--', '.', ':!node_modules'], { timeoutMs: GIT_MS })
+    const ran = await $.process.run(['git', '--no-pager', 'grep', '-n', '-I', '-E', adapterOf(u.ecosystem).importPattern(u.name), '--', '.', ':!node_modules'], { timeoutMs: GIT_MS })
     const lines = ran.stdout.split(/\r?\n/).filter(l => l.trim())
     const files = new Set(lines.map(l => l.split(':')[0]))
     return { files: files.size, lines: lines.slice(0, 40).map(l => l.slice(0, 200)) }
@@ -131,7 +177,7 @@ async function explain($: EngineInterface, u: Upgrade): Promise<void> {
     return
   }
   await setReason($, key, { status: 'loading' })
-  const [notes, usage] = await Promise.all([releaseNotes($, u), usageOf($, u.name)])
+  const [notes, usage] = await Promise.all([releaseNotes($, u), usageOf($, u)])
   const reply = await $.model.complete({ model: 'haiku', system: SYSTEM, prompt: prompt(u, notes, usage), maxTokens: 400, timeoutMs: EXPLAIN_MS })
   const reason = reply.isAnswered ? parseReason(reply.text) : undefined
   if (!reason) {
@@ -206,13 +252,64 @@ function runScan($: EngineInterface, isFresh = false): Promise<void> {
   return running
 }
 
+type Scanned = { upgrades: Upgrade[]; held: number; checked: number; failed: number }
+
+// Any ecosystem but npm: what the manifest declares, what the lockfile says
+// is installed, and how far the registry's latest is.
+async function scanGeneric($: EngineInterface, adapter: Adapter, present: string[], isFresh: boolean): Promise<Scanned> {
+  const files = await readFiles($, present)
+  const deps = adapter.parse(files)
+  let failed = 0
+  const found = await pool(deps, CONCURRENCY, async (d: Dep): Promise<Upgrade | 'current' | undefined> => {
+    const installed = parseVersion(d.installed ?? '') ?? baseOf(d.spec)
+    if (!installed) return undefined
+    try {
+      const text = await latestIn($, adapter, d.name, show(installed), isFresh)
+      const latest = text ? parseVersion(text) : undefined
+      if (!latest) return 'current'
+      const bump = bumpOf(installed, latest)
+      if (bump === 'none') return 'current'
+      const group = bump === 'major' ? 'review' : 'bump'
+      return { name: d.name, ecosystem: adapter.id, spec: d.spec, current: show(installed), latest: text as string, bump, isDev: d.isDev, group, conflicts: [] }
+    } catch {
+      failed++
+      return 'current'
+    }
+  })
+  const upgrades = found.filter((f): f is Upgrade => typeof f === 'object')
+  return { upgrades, held: 0, checked: found.filter(f => f !== undefined).length, failed }
+}
+
 async function scanProject($: EngineInterface, isFresh: boolean): Promise<void> {
-  if (!(await $.fs.exists(MANIFEST))) {
+  const ecosystems = await detected($)
+  if (ecosystems.length === 0) {
     await setScan($, { status: 'none' })
     return
   }
   await setScan($, { status: 'scanning' })
   try {
+    const all: Scanned = { upgrades: [], held: 0, checked: 0, failed: 0 }
+    for (const { adapter, present } of ecosystems) {
+      const part = adapter.id === 'npm' ? await scanNpm($, isFresh) : await scanGeneric($, adapter, present, isFresh)
+      all.upgrades.push(...part.upgrades)
+      all.held += part.held
+      all.checked += part.checked
+      all.failed += part.failed
+    }
+    const { upgrades, held, checked, failed } = all
+    await setScan($, { status: 'done', upgrades: sortUpgrades(upgrades), held, checked, failed, at: Date.now(), ecosystems: ecosystems.map(e => e.adapter.id) })
+    // Haiku reads the majors in the background: the list shows at once.
+    void explainMajors($, upgrades).catch(() => undefined)
+    await checkPending($)
+  } catch (err) {
+    await setScan($, { status: 'error', message: err instanceof Error ? err.message : String(err) })
+  }
+}
+
+// npm, with what only npm has: Expo's table, node_modules, peer
+// dependencies and exact pins in the lockfile.
+async function scanNpm($: EngineInterface, isFresh: boolean): Promise<Scanned> {
+  {
     const declared = parseManifest(await $.fs.read(MANIFEST))
     const lock = await readJson($, LOCK)
     let failed = 0
@@ -223,7 +320,7 @@ async function scanProject($: EngineInterface, isFresh: boolean): Promise<void> 
       if (!installed) return undefined
       installedMap.set(d.name, installedFromManifest(installedPkg, installed))
       try {
-        const latest = await latestOnNpm($, d.name, isFresh)
+        const latest = await latestIn($, NPM, d.name, show(installed), isFresh)
         return { declared: d, installed, latest: latest ? parseVersion(latest) : undefined }
       } catch {
         failed++
@@ -266,12 +363,7 @@ async function scanProject($: EngineInterface, isFresh: boolean): Promise<void> 
         }
       }
     }
-    await setScan($, { status: 'done', upgrades: sortUpgrades(upgrades), held, checked: checked.length, failed, at: Date.now() })
-    // Haiku reads the majors in the background: the list shows at once.
-    void explainMajors($, upgrades).catch(() => undefined)
-    await checkPending($)
-  } catch (err) {
-    await setScan($, { status: 'error', message: err instanceof Error ? err.message : String(err) })
+    return { upgrades, held, checked: checked.length, failed }
   }
 }
 
@@ -294,18 +386,30 @@ async function runCommand($: EngineInterface, argv: string[], timeoutMs = INSTAL
   }
 }
 
-// The upgraded ranges git shows uncommitted in package.json: what a PR
-// would hold. Read from git, so it holds across sessions and for upgrades
-// made by hand. Outside a git repository there is nothing pending.
+// The upgraded ranges uncommitted in each ecosystem's manifest: what a PR
+// would hold. Each manifest as HEAD holds it is read with its adapter and
+// compared with the worktree's, so it holds across sessions and for
+// upgrades made by hand. Outside a git repository there is nothing pending.
 async function checkPending($: EngineInterface): Promise<void> {
   let value = NO_PENDING
   try {
-    const diff = await $.process.run(['git', '--no-pager', 'diff', '-U0', '--', MANIFEST], { timeoutMs: GIT_MS })
-    const names = parseManifest(await $.fs.read(MANIFEST)).map(d => d.name)
-    const changes = diff.exitCode === 0 ? changesOf(diff.stdout, names) : []
+    const changes: Pending['changes'] = []
+    const tracked: string[] = []
+    const managers: string[] = []
+    for (const { adapter, present } of await detected($)) {
+      const manifest = manifestOf(adapter, present) as string
+      const head = await $.process.run(['git', '--no-pager', 'show', `HEAD:${manifest}`], { timeoutMs: GIT_MS })
+      if (head.exitCode !== 0) continue
+      const before = adapter.parse({ [manifest]: head.stdout })
+      const after = adapter.parse(await readFiles($, [manifest]))
+      const own = specChanges(before, after)
+      if (own.length === 0) continue
+      changes.push(...own)
+      tracked.push(...adapter.manifests, ...adapter.lockfiles)
+      managers.push(adapter.managerOf(present))
+    }
     if (changes.length > 0) {
-      const lockfiles = LOCKFILES.map(([file]) => file)
-      const status = await $.process.run(['git', 'status', '--porcelain', '--', MANIFEST, ...lockfiles], { timeoutMs: GIT_MS })
+      const status = await $.process.run(['git', 'status', '--porcelain', '--', ...tracked], { timeoutMs: GIT_MS })
       // " M path": a tracked file changed in the worktree.
       const files = status.stdout
         .split(/\r?\n/)
@@ -314,7 +418,7 @@ async function checkPending($: EngineInterface): Promise<void> {
       const branch = (await $.process.run(['git', 'branch', '--show-current'], { timeoutMs: GIT_MS })).stdout.trim()
       const originHead = await $.process.run(['git', 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { timeoutMs: GIT_MS })
       const isMain = isMainBranch(branch, originHead.exitCode === 0 ? originHead.stdout : '')
-      value = { changes, files: files.length > 0 ? files : [MANIFEST], manager: managerOf(files), branch, isMain }
+      value = { changes, files, manager: managers.join(', '), branch, isMain }
     }
   } catch {
     value = NO_PENDING
@@ -380,17 +484,25 @@ async function upgradeBumps($: EngineInterface): Promise<void> {
   if (state.status !== 'done') return
   const bumps = state.upgrades.filter(u => u.group === 'bump')
   if (bumps.length === 0) return
-  const present: string[] = []
-  for (const [file] of LOCKFILES) if (await $.fs.exists(file)) present.push(file)
-  const manager = managerOf(present)
+  // Each ecosystem installs its own, with its own tool.
+  const plans: { adapter: Adapter; present: string[]; upgrades: Upgrade[] }[] = []
+  for (const { adapter, present } of await detected($)) {
+    const upgrades = bumps.filter(u => u.ecosystem === adapter.id)
+    if (upgrades.length > 0) plans.push({ adapter, present, upgrades })
+  }
+  const manager = plans.map(p => p.adapter.managerOf(p.present)).join(', ')
   await setJob($, { status: 'running', manager, count: bumps.length })
   try {
-    for (const argv of installArgv(manager, bumps)) {
-      const ran = await runCommand($, argv)
-      if (ran.exitCode !== 0) {
-        await setJob($, { status: 'failed', message: `${argv.slice(0, 2).join(' ')} terminó con código ${ran.exitCode}: ${tail(ran.stderr || ran.stdout)}` })
-        await runScan($, true)
-        return
+    for (const { adapter, present, upgrades } of plans) {
+      const files = await readFiles($, present)
+      if (adapter.rewrite) for (const [path, text] of Object.entries(adapter.rewrite(files, upgrades))) await $.fs.write(path, text)
+      for (const argv of adapter.installArgv(present, upgrades, files)) {
+        const ran = await runCommand($, argv)
+        if (ran.exitCode !== 0) {
+          await setJob($, { status: 'failed', message: `${argv.slice(0, 2).join(' ')} terminó con código ${ran.exitCode}: ${tail(ran.stderr || ran.stdout)}` })
+          await runScan($, true)
+          return
+        }
       }
     }
     await setJob($, { status: 'upgraded', count: bumps.length, at: Date.now() })
@@ -406,7 +518,7 @@ export const register: Register = on => {
     await $.command.register({ name: COMMAND, description: 'Abre el panel con las librerías que se pueden actualizar' })
     // Opens by itself only when the scan finds something to upgrade; /upgrades
     // opens it any time.
-    if (await $.fs.exists(MANIFEST)) {
+    if ((await detected($)).length > 0) {
       void runScan($).then(async () => {
         const state = await read($, scan)
         if (state.status === 'done' && state.upgrades.length > 0) await $.ui.open({ id: PANE, title: TITLE })
@@ -440,8 +552,8 @@ export const register: Register = on => {
     if (state.status === 'none') {
       return (
         <Box flexDirection="column">
-          <Text>No encontré un package.json en este proyecto.</Text>
-          <Text dimColor>Por ahora reviso npm (JavaScript y TypeScript) y Expo.</Text>
+          <Text>No encontré dependencias que revisar en este proyecto.</Text>
+          <Text dimColor>Reviso npm y Expo (package.json), PyPI (pyproject.toml, requirements.txt), Go (go.mod), Cargo (Cargo.toml) y Pub (pubspec.yaml).</Text>
         </Box>
       )
     }

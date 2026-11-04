@@ -8,9 +8,11 @@
 // dependency, so it cannot go up alone.
 export type Group = 'bump' | 'review' | 'expo' | 'blocked'
 
+export type Ecosystem = 'npm' | 'pypi' | 'go' | 'cargo' | 'pub'
+
 export type Upgrade = {
   name: string
-  ecosystem: 'npm'
+  ecosystem: Ecosystem
   // The range package.json declares, whose prefix (^, ~) an upgrade keeps.
   spec: string
   current: string
@@ -27,7 +29,7 @@ export type Scan =
   | { status: 'scanning' }
   | { status: 'none' }
   | { status: 'error'; message: string }
-  | { status: 'done'; upgrades: Upgrade[]; held: number; checked: number; failed: number; at: number }
+  | { status: 'done'; upgrades: Upgrade[]; held: number; checked: number; failed: number; at: number; ecosystems: Ecosystem[] }
 
 // An upgrade the pane runs: the package manager's install of the bump group.
 export type Job =
