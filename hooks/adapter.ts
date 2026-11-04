@@ -26,8 +26,9 @@ export type Adapter = {
   latestUrl: (name: string) => string
   headers?: Record<string, string>
   latestOf: (text: string) => string | undefined
-  // A newer major the registry's latest does not name (Go's /v2 paths).
-  nextMajorUrl?: (name: string, current: string) => string | undefined
+  // Where a registry's latest stays within one major because each major is
+  // its own name (Go's /v2 module paths): the name of the next major.
+  nextMajor?: (name: string, current: string) => string
   // The install commands that take the bump group up, given which of its
   // files exist; with `rewrite` instead, the files the hooks write.
   installArgv: (present: string[], upgrades: Upgrade[], files: Files) => string[][]

@@ -47,6 +47,8 @@ const GIT_MS = 2 * 60 * 1000
 // A registry answer is reused for this long, across sessions and projects.
 const CACHE_MS = 6 * 60 * 60 * 1000
 const CONCURRENCY = 8
+// How many majors past the latest one a scan looks for, at most.
+const MAX_MAJOR_HOPS = 6
 
 type Cached = { version: string; at: number }
 
@@ -70,11 +72,17 @@ async function latestIn($: EngineInterface, adapter: Adapter, name: string, curr
   const res = await $.http.fetch(adapter.latestUrl(name), { headers: adapter.headers ?? {} })
   if (!res.ok) return undefined
   let version = adapter.latestOf(res.text)
-  const next = adapter.nextMajorUrl?.(name, current)
-  if (next) {
-    const major = await fetchText($, next, adapter.headers)
-    const found = major ? adapter.latestOf(major) : undefined
-    if (found) version = found
+  // Each next major is asked for until one is not there: chi went from v1
+  // to v5, every major between published.
+  if (adapter.nextMajor && version) {
+    let path = name
+    for (let hop = 0; hop < MAX_MAJOR_HOPS; hop++) {
+      path = adapter.nextMajor(path, version)
+      const major = await fetchText($, adapter.latestUrl(path), adapter.headers)
+      const found = major ? adapter.latestOf(major) : undefined
+      if (!found) break
+      version = found
+    }
   }
   if (version) await $.store.set(key, { version, at: Date.now() } satisfies Cached)
   return version
