@@ -1,6 +1,6 @@
 # upgrade-mod
 
-Un mod de Claude Code que, al abrir un proyecto con librerías desactualizadas, muestra en un panel qué se puede actualizar y cuánto cuesta hacerlo. Lee proyectos de JavaScript y TypeScript (npm y Expo), Python (PyPI), Go, Rust (Cargo) y Dart o Flutter (Pub).
+Un mod de Claude Code que, al abrir un proyecto con librerías desactualizadas, muestra en un panel qué se puede actualizar y cuánto cuesta hacerlo. Lee proyectos de JavaScript y TypeScript (npm y Expo), Python (PyPI), Go, Rust (Cargo), Dart o Flutter (Pub), Kotlin y Java (Gradle y Maven), C# (NuGet) y Ruby (RubyGems).
 
 ## Qué muestra
 
@@ -63,11 +63,18 @@ En los dos casos, el commit lleva solo los manifests y lockfiles de los ecosiste
 | **Go** | los `require` directos de `go.mod` | `go.mod` | proxy.golang.org | `go get módulo@versión` y `go mod tidy` |
 | **Cargo** (Rust) | `Cargo.toml` (dependencies, dev, build y target) | `Cargo.lock` | crates.io | reescribe el requisito y luego `cargo update -p` |
 | **Pub** (Dart, Flutter) | `pubspec.yaml` | `pubspec.lock` | pub.dev | reescribe la restricción y luego `flutter pub get` o `dart pub get` |
+| **Maven** (Kotlin, Java) | `gradle/libs.versions.toml`, cada `build.gradle(.kts)` y `pom.xml` del árbol | la versión escrita | Google Maven, Gradle Plugin Portal o Maven Central | reescribe la versión donde está escrita; Gradle y Maven la descargan en el siguiente build |
+| **NuGet** (C#, F#, VB) | cada `.csproj`, `.fsproj` y `.vbproj` del árbol, `Directory.Packages.props` | la versión escrita | api.nuget.org | reescribe el `Version` y luego `dotnet restore` |
+| **RubyGems** (Ruby) | `Gemfile` | `Gemfile.lock` | rubygems.org | reescribe el requisito y luego `bundle update --conservative` |
 
 Algunos detalles:
 
 - **Go**: una versión mayor a partir de la v2 es otra ruta de módulo (`github.com/go-chi/chi/v5`). El panel pregunta por cada mayor siguiente hasta que una no existe, así que `chi` 1.5.4 aparece con 5.5.0. Esa actualización exige cambiar los imports, y el botón no la hace.
 - **PyPI**: con solo `requirements.txt` no hay lockfile, así que el botón reescribe los pins y no instala nada: instala tú en tu entorno (`pip install -r requirements.txt`). Para buscar los imports se usa el nombre del módulo (`PyYAML` se importa como `yaml`); algunos nombres poco comunes pueden no encontrarse.
+- **Gradle**: el catálogo de versiones se lee exacto. Una versión que comparten varias librerías o plugins es una sola fila (`ktor (8)`, `kotlin (6)`) y el botón la sube una vez. En los `build.gradle(.kts)` solo se leen las coordenadas escritas como texto (`"io.mockk:mockk:1.13.10"`, `id("x") version "1.2"`): una versión guardada en una variable (`$kotlinVersion`) es código y queda fuera. También queda fuera una versión del catálogo que ninguna librería ni plugin usa, por ejemplo una que lee el `build-logic` con `libs.versions.x`: sin coordenadas no hay a qué registro preguntar. Solo cuentan las versiones estables: el `<release>` de Maven puede ser una alfa (lifecycle `2.12.0-alpha05`), así que se mira la lista completa.
+- **Maven**: se leen las `<dependency>` y los `<plugin>` con versión propia o una `${propiedad}` de `<properties>`. Una versión que gestiona un POM padre o un BOM queda fuera.
+- **NuGet**: los manifests se buscan en todo el árbol (`src/Api/Api.csproj`). Un analizador (`PrivateAssets="all"`) cuenta como dependencia de desarrollo. Una versión con una propiedad de MSBuild (`$(X)`) o un rango (`[1.0,2.0)`) queda fuera.
+- **RubyGems**: los grupos `:development` y `:test` cuentan como desarrollo, también dentro de un bloque `platforms`. Una gema sin requisito no se reescribe: la sube Bundler. Las versiones de cuatro partes (`8.1.4.1`) se comparan completas.
 - **Expo, peerDependencies y versiones fijadas** se revisan solo en npm.
 - Las dependencias de ruta, de git o del workspace no se revisan, porque no vienen de un registro.
 

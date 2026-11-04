@@ -15,11 +15,11 @@ Branch: `feat/ecosystems-wave-3` · Delivery: `ask-on-risk` · Tests: `claude pl
 
 | ID | Specs | Route | Status | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | S3 | inline | pending | |
-| T2 | S1, S2 (Maven/Gradle) | inline | pending | |
-| T3 | S1, S2 (NuGet) | inline | pending | |
-| T4 | S1, S2 (RubyGems) | inline | pending | |
-| T5 | S3, docs, version | inline | pending | |
+| T1 | S3 | inline | done | c50e830 |
+| T2 | S1, S2 (Maven/Gradle) | inline | done | 4f9b8ea |
+| T3 | S1, S2 (NuGet) | inline | done | 1362623 |
+| T4 | S1, S2 (RubyGems) | inline | done | 06bcc49 |
+| T5 | S3, docs, version | inline | done | the closing commit |
 
 T1: four-part versions (`8.1.4.1`), manifests found by pattern anywhere in the tree, rows that stand for a shared version (`display`, `source`), and an `infoUrl` for release notes where the latest answer names no repository. T2-T4: one adapter each, with fixtures, registry-shaped tests and a check against a real project where one exists (mobileTemplate for Gradle, Algoritmo for NuGet). T5: README, version 0.10.0, merge and reinstall.
 
@@ -29,3 +29,4 @@ Route evidence: every adapter depends on T1's contract changes and is about 150-
 
 - **L1** (2026-11-04) User: "dale a la oleada 3".
 - **L2** Probes: Maven `maven-metadata.xml` `<release>` can be a prerelease (lifecycle 2.12.0-alpha05, AGP 9.6.0-alpha02), so the stable max comes from `<versions>`; ktor's POM names its repository in `<scm><url>`; NuGet `v3-flatcontainer/<id>/index.json` lists versions, the nuspec holds `<repository url>`; RubyGems `versions/<name>/latest.json` and `gems/<name>.json` (`source_code_uri`); Rails versions have four parts. Local tools: java 17 and dotnet 8, no mvn, gradle, ruby or bundle. Real projects: mobileTemplate (KMP, version catalog, nine modules), Algoritmo (one csproj with no packages).
+- **L3** T1-T5 done; 85 tests across 9 files, tsc and validate clean at each commit. Real checks: the Maven adapter on mobileTemplate against the live registries reads 9 manifests and 27 rows, all current but kotlin (6) 2.4.20 -> 2.4.21; ktlint-gradle is a plugin artifact on the Plugin Portal, not Central, so a 404 from Central now falls back to the Portal; mokkery and buildkonfig are catalog versions no coordinate uses, so they cannot be looked up (documented). The NuGet adapter end to end on a scratch console project: Newtonsoft.Json 13.0.1 -> 13.0.4 rewritten and resolved by a real dotnet restore, Serilog 4 left as a major, StyleCop.Analyzers dev and current (1.2 is beta). A test mock that simulated the npm install on every process call broke once the scan began calling git ls-files (fixed to npm calls only). Twice a node -e edit with Markdown backticks inside a double-quoted bash string ran them as command substitution; nothing was created or changed, and later edits went through the editor. Not checked: no mvn, gradle, ruby or bundle here, so those install paths never ran for real.

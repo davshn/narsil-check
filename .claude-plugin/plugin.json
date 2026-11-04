@@ -1,6 +1,6 @@
 {
   "name": "upgrade-mod",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "A side pane that opens with the project and lists which libraries can be upgraded, and how hard each upgrade is",
   "author": { "name": "Davshn" },
   "types": "./types/index.d.ts"
