@@ -213,9 +213,12 @@ test('the button installs the trivial upgrades and scans again', async ($, on) =
   const ran: string[][] = []
   on('process.run', (_, e) => {
     ran.push([...e.argv])
-    // The install moves what it upgraded to the new version.
-    files['node_modules/zod/package.json'] = JSON.stringify({ version: '3.25.1' })
-    files['node_modules/typescript/package.json'] = JSON.stringify({ version: '5.9.3' })
+    // The install moves what it upgraded to the new version; git calls
+    // (the scan lists manifests with git ls-files) change nothing.
+    if (e.argv[0] === 'npm') {
+      files['node_modules/zod/package.json'] = JSON.stringify({ version: '3.25.1' })
+      files['node_modules/typescript/package.json'] = JSON.stringify({ version: '5.9.3' })
+    }
     return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('ui.toast', () => ({ value: undefined }))

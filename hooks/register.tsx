@@ -69,7 +69,9 @@ async function latestIn($: EngineInterface, adapter: Adapter, name: string, curr
   const key = `${adapter.id}:${name}`
   const cached = (await $.store.get(key)) as Cached | undefined
   if (!isFresh && cached && Date.now() - cached.at < CACHE_MS) return cached.version
-  const res = await $.http.fetch(adapter.latestUrl(name), { headers: adapter.headers ?? {} })
+  let res = await $.http.fetch(adapter.latestUrl(name), { headers: adapter.headers ?? {} })
+  const alternate = res.ok ? undefined : adapter.alternateUrl?.(name)
+  if (alternate) res = await $.http.fetch(alternate, { headers: adapter.headers ?? {} })
   if (!res.ok) return undefined
   let version = adapter.latestOf(res.text)
   // Each next major is asked for until one is not there: chi went from v1

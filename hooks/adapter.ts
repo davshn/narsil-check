@@ -29,6 +29,9 @@ export type Adapter = {
   parse: (files: Files) => Dep[]
   // Where its registry answers the latest release of `name`, and how.
   latestUrl: (name: string) => string
+  // A second registry asked when the first does not have it (a Gradle
+  // plugin published as a library is on the Plugin Portal, not Central).
+  alternateUrl?: (name: string) => string | undefined
   headers?: Record<string, string>
   latestOf: (text: string) => string | undefined
   // Where a registry's latest stays within one major because each major is

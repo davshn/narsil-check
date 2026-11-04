@@ -5,6 +5,7 @@ import { escapeRegex } from './adapter'
 import type { Adapter } from './adapter'
 import { CARGO } from './cargo'
 import { GO } from './golang'
+import { MAVEN } from './maven'
 import { PUB } from './pub'
 import { PYPI } from './pypi'
 import { LOCKFILES, MANIFEST, installArgv, latestOf, latestUrl, managerOf, parseManifest, lockedVersion } from './npm'
@@ -38,7 +39,7 @@ export const NPM: Adapter = {
   },
 }
 
-export const ADAPTERS: Adapter[] = [NPM, PYPI, GO, CARGO, PUB]
+export const ADAPTERS: Adapter[] = [NPM, PYPI, GO, CARGO, PUB, MAVEN]
 
 export function adapterOf(id: Ecosystem): Adapter {
   return ADAPTERS.find(a => a.id === id) ?? NPM
