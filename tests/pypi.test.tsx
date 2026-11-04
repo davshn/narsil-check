@@ -141,12 +141,15 @@ test("PyPI's answer gives the latest release and the GitHub repository", () => {
   expect(PYPI.installArgv(['requirements.txt'], [], {})).toEqual([])
 })
 
-function python(on: On, latest: Record<string, string>) {
-  const files: Record<string, string> = { 'pyproject.toml': PYPROJECT, 'uv.lock': UV_LOCK }
+function python(on: On, latest: Record<string, string>, web: Record<string, string> = {}, extra: Record<string, string> = {}) {
+  const files: Record<string, string> = { 'pyproject.toml': PYPROJECT, 'uv.lock': UV_LOCK, ...extra }
   const store = new Map<string, unknown>()
   const keyOf = (path: string) => {
     const at = path.replace(/\\/g, '/')
-    return Object.keys(files).find(name => at === name || at.endsWith(`/${name}`))
+    // The longest name first: node_modules/zod/package.json before package.json.
+    return Object.keys(files)
+      .sort((a, b) => b.length - a.length)
+      .find(name => at === name || at.endsWith(`/${name}`))
   }
   on('fs.exists', (_, e) => ({ value: keyOf(e.path) !== undefined }))
   on('fs.read', (_, e) => {
@@ -159,10 +162,14 @@ function python(on: On, latest: Record<string, string>) {
     return { value: undefined }
   })
   on('http.fetch', (_, e) => {
-    const version = latest[decodeURIComponent(e.url.replace('https://pypi.org/pypi/', '').replace(/\/json$/, ''))]
+    const page = web[e.url]
+    if (page !== undefined) return { value: { status: 200, ok: true, headers: {}, text: page } }
+    const name = decodeURIComponent(e.url.replace('https://pypi.org/pypi/', '').replace(/\/json$/, ''))
+    const version = latest[name]
+    const urls = name === 'Django' ? { Source: 'https://github.com/django/django' } : {}
     return {
       value: version
-        ? { status: 200, ok: true, headers: {}, text: JSON.stringify({ info: { version } }) }
+        ? { status: 200, ok: true, headers: {}, text: JSON.stringify({ info: { version, project_urls: urls } }) }
         : { status: 404, ok: false, headers: {}, text: '{}' },
     }
   })
@@ -178,7 +185,10 @@ function python(on: On, latest: Record<string, string>) {
   const ran: string[][] = []
   on('process.run', (_, e) => {
     ran.push([...e.argv])
-    return { value: { exitCode: e.argv[0] === 'git' ? 1 : 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    // git grep finds the project's imports; any other git call: no repository.
+    const grep = e.argv[0] === 'git' && e.argv.includes('grep')
+    const stdout = grep ? 'app/views.py:1:from django.http import HttpResponse\napp/urls.py:2:from django.urls import path\n' : ''
+    return { value: { exitCode: e.argv[0] === 'git' && !grep ? 1 : 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   return { files, ran }
 }
@@ -210,5 +220,48 @@ test('a uv project lists its packages and the button raises pyproject.toml and r
   expect(files['pyproject.toml']).toContain('"ruff==0.4.10"')
   // The major is left for the person.
   expect(files['pyproject.toml']).toContain(`"Django[argon2]~=4.2 ; python_version > '3.8'"`)
+  await ui.unmount()
+})
+
+test("Haiku reads a Python major from its GitHub release and the project's imports", async ($, on) => {
+  python(
+    on,
+    { requests: '2.34.2', Django: '6.1.3', PyYAML: '6.0.3', mkdocs: '1.5.3', pytest: '8.4.2', ruff: '0.4.10' },
+    { 'https://api.github.com/repos/django/django/releases/tags/v6.0.0': JSON.stringify({ body: 'Removed django.utils.timezone.utc.' }) },
+  )
+  const asked: string[] = []
+  on('model.complete', (_, e) => {
+    asked.push(e.prompt)
+    return {
+      value: {
+        isAnswered: true,
+        text: 'DIFICULTAD: media\nRAZÓN: Django 6 quita timezone.utc; tus imports no lo usan.',
+        usage: { input_tokens: 1, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      },
+    }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  for (let i = 0; i < 100 && asked.length === 0; i++) await new Promise<void>(resolve => setTimeout(() => resolve(), 10))
+
+  expect(asked).toHaveLength(1)
+  expect(asked[0]).toContain('Upgrade: 4.2.11 -> 6.1.3')
+  expect(asked[0]).toContain('Removed django.utils.timezone.utc.')
+  expect(asked[0]).toContain('app/views.py:1:from django.http import HttpResponse')
+  expect(asked[0]).toContain('in 2 files')
+})
+
+test('a project with two ecosystems names each library\'s', async ($, on) => {
+  python(on, { requests: '2.34.2' }, { 'https://registry.npmjs.org/zod/latest': JSON.stringify({ version: '3.25.1' }) }, {
+    'package.json': JSON.stringify({ dependencies: { zod: '^3.22.0' } }),
+    'node_modules/zod/package.json': JSON.stringify({ version: '3.22.4' }),
+  })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /^zod/ }))?.text).toBe('zod 3.22.4 → 3.25.1 · npm')
+  expect((await ui.find({ type: 'Text', text: /^requests/ }))?.text).toBe('requests 2.31.0 → 2.34.2 · PyPI')
   await ui.unmount()
 })

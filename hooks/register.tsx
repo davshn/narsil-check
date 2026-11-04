@@ -29,7 +29,7 @@ import { COMMAND, GROUPS, PANE, TITLE, agoLabel, failedNote, heldNote, jobNote, 
 
 // Change a tag when its type's fields change: it declines what an earlier
 // version stored, which outlives a reload.
-const scan = atom({ plugin: 'upgrade-mod', key: 'scan' } as const, { status: 'idle' } as Scan, { shape: 'scan-3' })
+const scan = atom({ plugin: 'upgrade-mod', key: 'scan' } as const, { status: 'idle' } as Scan, { shape: 'scan-4' })
 const job = atom({ plugin: 'upgrade-mod', key: 'job' } as const, { status: 'idle' } as Job, { shape: 'job-1' })
 const NO_PENDING: Pending = { changes: [], files: [], manager: 'npm', branch: '', isMain: false }
 const pending = atom({ plugin: 'upgrade-mod', key: 'pending' } as const, NO_PENDING, { shape: 'pending-2' })
@@ -624,6 +624,7 @@ export const register: Register = on => {
                       {u.name} <Text dimColor>{u.current} → </Text>
                       {u.latest}
                       {u.isDev ? <Text dimColor> · dev</Text> : ''}
+                      {state.ecosystems.length > 1 ? <Text dimColor> · {adapterOf(u.ecosystem).label}</Text> : ''}
                     </Text>
                     {line && (
                       <Text color={line.color} dimColor={line.isDim}>

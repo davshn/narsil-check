@@ -1,6 +1,6 @@
 # upgrade-mod
 
-Un mod de Claude Code que, al abrir un proyecto con librerías desactualizadas, muestra en un panel qué se puede actualizar y cuánto cuesta hacerlo.
+Un mod de Claude Code que, al abrir un proyecto con librerías desactualizadas, muestra en un panel qué se puede actualizar y cuánto cuesta hacerlo. Lee proyectos de JavaScript y TypeScript (npm y Expo), Python (PyPI), Go, Rust (Cargo) y Dart o Flutter (Pub).
 
 ## Qué muestra
 
@@ -15,11 +15,11 @@ Las librerías desactualizadas, en cuatro grupos:
 
 Las librerías al día no aparecen. En un proyecto Expo, una librería que el SDK fija no se ofrece para actualizar aunque npm tenga una versión más nueva: se sube junto con el SDK.
 
-Las versiones salen del registro de npm, no de un modelo. Cada respuesta se guarda 6 horas, y el botón **Revisar de nuevo** fuerza una consulta nueva.
+Las versiones salen del registro de cada ecosistema, no de un modelo. Cada respuesta se guarda 6 horas, y el botón **Revisar de nuevo** fuerza una consulta nueva. Si el proyecto usa más de un ecosistema, cada librería lleva el suyo al lado (`zod 3.22.4 → 3.25.1 · npm`).
 
 ## Dependencias que se bloquean entre sí
 
-Antes de clasificar una actualización, el panel hace tres comprobaciones, con los datos del registro, de `node_modules` y de `package-lock.json`, sin usar un modelo:
+Esta sección es solo de npm. Antes de clasificar una actualización, el panel hace tres comprobaciones, con los datos del registro, de `node_modules` y de `package-lock.json`, sin usar un modelo:
 
 - **Lo que pide la versión nueva**: si `eslint-plugin-astro` 3.2.1 necesita `eslint >=10.0.0` y tienes eslint 9, no se puede subir sola.
 - **Lo que piden los paquetes instalados**: si `eslint-config-love` exige `eslint ^9.35.0`, eslint 10 no se puede subir sola.
@@ -40,11 +40,11 @@ La API de GitHub sin sesión permite 60 consultas por hora. Si se agotan, el an�
 
 ## Actualizar las triviales
 
-El grupo **Solo subir la versión** tiene un botón que instala todas sus librerías de una vez, con el gestor de paquetes que indique el lockfile (npm, pnpm, yarn o bun). Cada una conserva el prefijo de su rango (`^3.22.0` pasa a `^3.25.1`) y su sección (`dependencies` o `devDependencies`). Las versiones mayores y las de Expo no se tocan: hay que revisarlas. Si la instalación falla, el panel muestra el final del error. Después de actualizar, ejecuta los tests antes de hacer commit.
+El grupo **Solo subir la versión** tiene un botón que sube todas sus librerías de una vez, cada ecosistema con su herramienta (ver la tabla de abajo). Cada librería conserva el operador de su rango (`^3.22.0` pasa a `^3.25.1`, `>=2.31,<3` pasa a `>=2.34.2,<3`) y su sección. Las versiones mayores y las de Expo no se tocan: hay que revisarlas. Si la instalación falla, el panel muestra el final del error. Después de actualizar, ejecuta los tests antes de hacer commit.
 
 ## Crear el PR
 
-Cuando `git diff` muestra en `package.json` rangos de dependencias cambiados sin commit, el panel los lista con un botón para subirlos. Da igual si los actualizó el panel o lo hiciste a mano. Lo que hace el botón depende de la rama en la que estás:
+Cuando los manifests (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `pubspec.yaml`...) tienen rangos de dependencias distintos de los de `HEAD`, el panel los lista con un botón para subirlos. Da igual si los actualizó el panel o lo hiciste a mano. Lo que hace el botón depende de la rama en la que estás:
 
 - **En una rama de trabajo** (**Commit y push a &lt;rama&gt;**): hace el commit y el push a esa misma rama, y nada más. El PR lo gestionas tú.
 - **En la rama principal** (**Crear rama, commit y PR**), la que indica `origin/HEAD` o, si no hay, `main` o `master`:
@@ -52,11 +52,24 @@ Cuando `git diff` muestra en `package.json` rangos de dependencias cambiados sin
   2. Hace el commit y sube la rama a `origin`.
   3. Abre el PR con `gh` contra la rama principal. Te quedas en la rama nueva: volver a la principal dejaría en `package.json` las versiones viejas mientras `node_modules` tiene las nuevas.
 
-En los dos casos, el commit lleva solo `package.json` y su lockfile, con el mensaje `chore(deps): upgrade N dependencies` y la lista de cambios. El resto de tus cambios sin commit no se incluye. Claude Code ejecuta git con los hooks del repositorio desactivados, así que los hooks de commit (por ejemplo, husky) no corren. El PR necesita `gh` instalado y con sesión iniciada.
+En los dos casos, el commit lleva solo los manifests y lockfiles de los ecosistemas que cambiaron, con el mensaje `chore(deps): upgrade N dependencies` y la lista de cambios. El resto de tus cambios sin commit no se incluye. Claude Code ejecuta git con los hooks del repositorio desactivados, así que los hooks de commit (por ejemplo, husky) no corren. El PR necesita `gh` instalado y con sesión iniciada.
 
 ## Ecosistemas
 
-Por ahora, npm (JavaScript y TypeScript) y Expo. La versión instalada se lee de `node_modules`, luego de `package-lock.json` y, si el proyecto no está instalado, de la versión escrita en `package.json`.
+| Ecosistema | Lee | Versión instalada | Registro | El botón ejecuta |
+| --- | --- | --- | --- | --- |
+| **npm** (JS, TS) y Expo | `package.json` | `node_modules`, luego `package-lock.json` | registry.npmjs.org | `npm install` (o pnpm, yarn, bun según el lockfile) |
+| **PyPI** (Python) | `pyproject.toml` (PEP 621, grupos PEP 735, Poetry), `requirements.txt`, `requirements-dev.txt` | `uv.lock` o `poetry.lock`; si no, el pin `==` | pypi.org | reescribe el rango y luego `uv lock` o `poetry lock` |
+| **Go** | los `require` directos de `go.mod` | `go.mod` | proxy.golang.org | `go get módulo@versión` y `go mod tidy` |
+| **Cargo** (Rust) | `Cargo.toml` (dependencies, dev, build y target) | `Cargo.lock` | crates.io | reescribe el requisito y luego `cargo update -p` |
+| **Pub** (Dart, Flutter) | `pubspec.yaml` | `pubspec.lock` | pub.dev | reescribe la restricción y luego `flutter pub get` o `dart pub get` |
+
+Algunos detalles:
+
+- **Go**: una versión mayor a partir de la v2 es otra ruta de módulo (`github.com/go-chi/chi/v5`). El panel pregunta por cada mayor siguiente hasta que una no existe, así que `chi` 1.5.4 aparece con 5.5.0. Esa actualización exige cambiar los imports, y el botón no la hace.
+- **PyPI**: con solo `requirements.txt` no hay lockfile, así que el botón reescribe los pins y no instala nada: instala tú en tu entorno (`pip install -r requirements.txt`). Para buscar los imports se usa el nombre del módulo (`PyYAML` se importa como `yaml`); algunos nombres poco comunes pueden no encontrarse.
+- **Expo, peerDependencies y versiones fijadas** se revisan solo en npm.
+- Las dependencias de ruta, de git o del workspace no se revisan, porque no vienen de un registro.
 
 ## Comandos
 
