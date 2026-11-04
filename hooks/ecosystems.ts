@@ -4,6 +4,7 @@ import type { Ecosystem } from '../types'
 import { escapeRegex } from './adapter'
 import type { Adapter } from './adapter'
 import { CARGO } from './cargo'
+import { PYPI } from './pypi'
 import { LOCKFILES, MANIFEST, installArgv, latestOf, latestUrl, managerOf, parseManifest, lockedVersion } from './npm'
 
 export const NPM: Adapter = {
@@ -35,7 +36,7 @@ export const NPM: Adapter = {
   },
 }
 
-export const ADAPTERS: Adapter[] = [NPM, CARGO]
+export const ADAPTERS: Adapter[] = [NPM, PYPI, CARGO]
 
 export function adapterOf(id: Ecosystem): Adapter {
   return ADAPTERS.find(a => a.id === id) ?? NPM
