@@ -19,7 +19,7 @@ import {
   repoOf,
 } from './explain'
 import type { Reason } from './explain'
-import { ADAPTERS, NPM, adapterOf, manifestOf, specChanges } from './ecosystems'
+import { ADAPTERS, NPM, adapterOf, manifestOf, manifestsOf, specChanges } from './ecosystems'
 import type { Adapter, Dep, Files } from './ecosystems'
 import { branchName, commitBody, commitTitle, isMainBranch, prBody, prUrlOf } from './git'
 import { EXPO_TABLE, LOCK, MANIFEST, expoTableUrl, installedFromManifest, installedOf, latestUrl, parseManifest, peerConflicts, pinConflicts, upgradeOf, versionUrl } from './npm'
@@ -92,6 +92,18 @@ async function latestIn($: EngineInterface, adapter: Adapter, name: string, curr
 async function presentOf($: EngineInterface, adapter: Adapter): Promise<string[]> {
   const present: string[] = []
   for (const file of [...adapter.manifests, ...adapter.lockfiles]) if (await $.fs.exists(file)) present.push(file)
+  // Manifests anywhere in the tree: the files git tracks or would track
+  // (untracked, not ignored), so build output is left out.
+  if (adapter.globs) {
+    try {
+      const listed = await $.process.run(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '--', ...adapter.globs.map(g => `:(glob)${g}`)], { timeoutMs: GIT_MS })
+      if (listed.exitCode === 0) {
+        for (const path of listed.stdout.split(/\r?\n/).map(l => l.trim())) if (path && !present.includes(path)) present.push(path)
+      }
+    } catch {
+      // Not a git repository: only the root manifests count.
+    }
+  }
   return present
 }
 
@@ -135,7 +147,7 @@ async function releaseNotes($: EngineInterface, u: Upgrade): Promise<string> {
     const installed = await readJson($, `node_modules/${u.name}/package.json`)
     repo = repoOf(installed) ?? repoOf(JSON.parse((await fetchText($, latestUrl(u.name))) ?? '{}'))
   } else {
-    const text = await fetchText($, adapter.latestUrl(u.name), adapter.headers)
+    const text = await fetchText($, adapter.infoUrl?.(u.name, u.latest) ?? adapter.latestUrl(u.name), adapter.headers)
     const url = text ? adapter.repoUrlOf(text) : undefined
     repo = url ? repoOf({ repository: url }) : undefined
   }
@@ -278,7 +290,10 @@ async function scanGeneric($: EngineInterface, adapter: Adapter, present: string
       const bump = bumpOf(installed, latest)
       if (bump === 'none') return 'current'
       const group = bump === 'major' ? 'review' : 'bump'
-      return { name: d.name, ecosystem: adapter.id, spec: d.spec, current: show(installed), latest: text as string, bump, isDev: d.isDev, group, conflicts: [] }
+      const upgrade: Upgrade = { name: d.name, ecosystem: adapter.id, spec: d.spec, current: show(installed), latest: text as string, bump, isDev: d.isDev, group, conflicts: [] }
+      if (d.display) upgrade.display = d.display
+      if (d.source) upgrade.source = d.source
+      return upgrade
     } catch {
       failed++
       return 'current'
@@ -405,15 +420,21 @@ async function checkPending($: EngineInterface): Promise<void> {
     const tracked: string[] = []
     const managers: string[] = []
     for (const { adapter, present } of await detected($)) {
-      const manifest = manifestOf(adapter, present) as string
-      const head = await $.process.run(['git', '--no-pager', 'show', `HEAD:${manifest}`], { timeoutMs: GIT_MS })
-      if (head.exitCode !== 0) continue
-      const before = adapter.parse({ [manifest]: head.stdout })
-      const after = adapter.parse(await readFiles($, [manifest]))
-      const own = specChanges(before, after)
-      if (own.length === 0) continue
-      changes.push(...own)
-      tracked.push(...adapter.manifests, ...adapter.lockfiles)
+      let changed = false
+      // Each manifest on its own: a catalog and nine build files each.
+      for (const manifest of manifestsOf(adapter, present)) {
+        const head = await $.process.run(['git', '--no-pager', 'show', `HEAD:${manifest}`], { timeoutMs: GIT_MS })
+        if (head.exitCode !== 0) continue
+        const before = adapter.parse({ [manifest]: head.stdout })
+        const after = adapter.parse(await readFiles($, [manifest]))
+        const own = specChanges(before, after)
+        if (own.length === 0) continue
+        changes.push(...own)
+        tracked.push(manifest)
+        changed = true
+      }
+      if (!changed) continue
+      tracked.push(...adapter.lockfiles)
       managers.push(adapter.managerOf(present))
     }
     if (changes.length > 0) {
@@ -621,7 +642,7 @@ export const register: Register = on => {
                 return (
                   <Box flexDirection="column">
                     <Text>
-                      {u.name} <Text dimColor>{u.current} → </Text>
+                      {u.display ?? u.name} <Text dimColor>{u.current} → </Text>
                       {u.latest}
                       {u.isDev ? <Text dimColor> · dev</Text> : ''}
                       {state.ecosystems.length > 1 ? <Text dimColor> · {adapterOf(u.ecosystem).label}</Text> : ''}

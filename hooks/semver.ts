@@ -2,24 +2,35 @@
 // of jump between two versions and whether a version meets a range.
 // Pure functions over plain values: the hooks module fetches and draws.
 
-export type Version = { major: number; minor: number; patch: number; pre: string }
+// `rest` holds the parts past the third that RubyGems and NuGet use
+// (Rails 8.1.4.1, a NuGet 4.0.0.1); absent for three parts or fewer.
+export type Version = { major: number; minor: number; patch: number; pre: string; rest?: number[] }
 
 // How far apart two versions are, which is the first guess at how hard the
 // upgrade is: a patch or a minor is usually a bump, a major needs reading.
 export type Bump = 'none' | 'patch' | 'minor' | 'major'
 
-const VERSION = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/
+// A Maven qualifier may follow a dot instead of a dash: 5.6.15.Final.
+const VERSION = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?((?:\.\d+)*)(?:[-.]([0-9A-Za-z][0-9A-Za-z.-]*))?(?:\+[0-9A-Za-z.-]+)?$/
 
 export function parseVersion(text: string): Version | undefined {
   const m = VERSION.exec(text.trim())
   if (!m) return undefined
-  return { major: Number(m[1]), minor: Number(m[2] ?? 0), patch: Number(m[3] ?? 0), pre: m[4] ?? '' }
+  const v: Version = { major: Number(m[1]), minor: Number(m[2] ?? 0), patch: Number(m[3] ?? 0), pre: m[5] ?? '' }
+  if (m[4]) v.rest = (m[4] as string).slice(1).split('.').map(Number)
+  return v
 }
 
 export function compare(a: Version, b: Version): number {
   if (a.major !== b.major) return a.major - b.major
   if (a.minor !== b.minor) return a.minor - b.minor
   if (a.patch !== b.patch) return a.patch - b.patch
+  const ar = a.rest ?? []
+  const br = b.rest ?? []
+  for (let n = 0; n < Math.max(ar.length, br.length); n++) {
+    const d = (ar[n] ?? 0) - (br[n] ?? 0)
+    if (d !== 0) return d
+  }
   // A prerelease comes before its release.
   if (a.pre === b.pre) return 0
   if (a.pre === '') return 1
@@ -124,5 +135,5 @@ function meets(v: Version, comparator: string): boolean {
 }
 
 export function show(v: Version): string {
-  return `${v.major}.${v.minor}.${v.patch}${v.pre ? `-${v.pre}` : ''}`
+  return `${v.major}.${v.minor}.${v.patch}${v.rest ? `.${v.rest.join('.')}` : ''}${v.pre ? `-${v.pre}` : ''}`
 }

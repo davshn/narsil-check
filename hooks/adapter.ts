@@ -6,8 +6,10 @@ import type { Ecosystem, Upgrade } from '../types'
 
 // One declared dependency: its name, the range or version the manifest
 // writes, whether it is a development one, and the version installed when
-// a lockfile records it.
-export type Dep = { name: string; spec: string; isDev: boolean; installed?: string }
+// a lockfile records it. `display` is how the pane names it when that is not
+// the name (a version catalog's shared "ktor" for eight libraries), and
+// `source` where its version is written, for an adapter that rewrites it.
+export type Dep = { name: string; spec: string; isDev: boolean; installed?: string; display?: string; source?: string }
 
 // The files an adapter read, by path: whichever of its manifests and
 // lockfiles exist.
@@ -17,8 +19,11 @@ export type Adapter = {
   id: Ecosystem
   // How the pane names it: "npm", "PyPI", "Go", "Cargo", "Pub".
   label: string
-  // The files whose presence says the project uses it; the first found is read.
+  // The files whose presence says the project uses it, at the root.
   manifests: string[]
+  // Manifests that may be anywhere in the tree ("**/build.gradle.kts",
+  // "**/*.csproj"), found with git ls-files.
+  globs?: string[]
   // The lockfiles it reads for installed versions, and a commit carries.
   lockfiles: string[]
   parse: (files: Files) => Dep[]
@@ -37,13 +42,31 @@ export type Adapter = {
   managerOf: (present: string[]) => string
   // An extended regex (git grep -E) for the project's imports of `name`.
   importPattern: (name: string) => string
-  // The GitHub repository the registry's answer records, for release notes.
+  // The GitHub repository the registry's answer records, for release notes;
+  // read from `infoUrl`'s answer instead when the latest answer names none
+  // (a version's POM, nuspec or gem record).
   repoUrlOf: (latestText: string) => string | undefined
+  infoUrl?: (name: string, latest: string) => string
 }
 
-// The manifest an adapter reads: the first of its manifests the project has.
+// A glob as a regex: "**/" any directories (none included), "*" within one.
+export function globRegex(glob: string): RegExp {
+  const body = glob
+    .split('**/')
+    .map(part => part.split('*').map(escapeRegex).join('[^/]*'))
+    .join('(?:.*/)?')
+  return new RegExp(`^${body}$`)
+}
+
+// The manifests among the files present: the root ones and the globbed ones.
+export function manifestsOf(adapter: Adapter, present: string[]): string[] {
+  const globs = (adapter.globs ?? []).map(globRegex)
+  return present.filter(p => adapter.manifests.includes(p) || globs.some(g => g.test(p)))
+}
+
+// The first manifest the project has: whether it uses the ecosystem at all.
 export function manifestOf(adapter: Adapter, present: string[]): string | undefined {
-  return adapter.manifests.find(m => present.includes(m))
+  return manifestsOf(adapter, present)[0]
 }
 
 // Each dependency's range at two points of the manifest (what HEAD holds and

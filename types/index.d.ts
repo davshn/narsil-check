@@ -22,6 +22,10 @@ export type Upgrade = {
   group: Group
   // Each peer dependency the upgrade breaks, in words: what blocks it.
   conflicts: string[]
+  // How the pane names it when that is not `name` ("ktor (8)" for a
+  // version catalog's shared version), and where its version is written.
+  display?: string
+  source?: string
 }
 
 export type Scan =

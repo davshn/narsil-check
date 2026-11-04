@@ -110,14 +110,14 @@ export function copyText(rows: Upgrade[], reasons: Record<string, Reason | undef
   const lines: string[] = []
   if (blocked.length > 0) {
     lines.push('Librerías bloqueadas por otras dependencias:')
-    for (const u of blocked) lines.push(`- ${u.name} ${u.current} → ${u.latest}: ${u.conflicts.join('; ')}`)
+    for (const u of blocked) lines.push(`- ${u.display ?? u.name} ${u.current} → ${u.latest}: ${u.conflicts.join('; ')}`)
   }
   if (majors.length > 0) {
     if (lines.length > 0) lines.push('')
     lines.push('Librerías con versión mayor pendiente:')
     for (const u of majors) {
       const r = reasons[reasonKey(u)]
-      lines.push(`- ${u.name} ${u.current} → ${u.latest}${r ? ` (dificultad ${r.difficulty}): ${r.text}` : ''}`)
+      lines.push(`- ${u.display ?? u.name} ${u.current} → ${u.latest}${r ? ` (dificultad ${r.difficulty}): ${r.text}` : ''}`)
     }
   }
   return lines.join('\n')
