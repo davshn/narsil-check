@@ -39,8 +39,8 @@ test('the section is colored by what most needs you, and its toggle names it', (
 })
 
 test('/narsil-check answers with its checks to anything but one it knows', () => {
-  expect(commandHelp('')).toBe('Narsil Check: revisiones del proyecto. /narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas.')
-  expect(commandHelp('todo')).toBe('Narsil Check: no conozco "todo". Revisiones: /narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas.')
+  expect(commandHelp('')).toBe('Narsil Check: revisiones del proyecto. /narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas. /narsil-check template "…": una tarea en Pendientes de una plantilla.')
+  expect(commandHelp('todo')).toBe('Narsil Check: no conozco "todo". Revisiones: /narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas. /narsil-check template "…": una tarea en Pendientes de una plantilla.')
 })
 
 // A project with one trivial upgrade, standing for the engine.
@@ -120,7 +120,7 @@ test('/narsil-check upgrade opens the pane, unfolded; anything else answers with
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await scanned($)
   const help = await $.command.run({ command: 'narsil-check', args: '', ...TYPED })
-  expect(help).toMatchObject({ text: 'Narsil Check: revisiones del proyecto. /narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas.' })
+  expect(help).toMatchObject({ text: 'Narsil Check: revisiones del proyecto. /narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas. /narsil-check template "…": una tarea en Pendientes de una plantilla.' })
 
   const ran = await $.command.run({ command: 'narsil-check', args: ' Upgrade ', ...TYPED })
   expect(ran).toMatchObject({ text: 'Narsil Check: revisando las librerías del proyecto.' })

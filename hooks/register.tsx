@@ -54,7 +54,8 @@ import {
   parseSession,
   textOf,
 } from './session'
-import type { Remote, SessionView } from '../types'
+import type { Remote, SessionView, Task, Todos } from '../types'
+import { TODO_FILE, TOOL_ADD, TOOL_DONE, TOOL_LIST, TOOL_TEMPLATE, findTask, newTask, parseEntry, parseTodos, serializeTodos, templateArg, templateMatches, templatePrompt, todosColor, todosLabel, todosText, withExclude } from './todos'
 import { COMMAND, COMMAND_HELP, GROUPS, PALETTE, PANE, TITLE, agoLabel, auditSummary, commandHelp, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, reasonLine, sortUpgrades, summaryOf, tail } from './words'
 
 // Change a tag when its type's fields change: it declines what an earlier
@@ -77,6 +78,10 @@ const session = atom({ plugin: 'narsil-check', key: 'session' } as const, NO_SES
 const isEnvOpen = atom({ plugin: 'narsil-check', key: 'isEnvOpen' } as const, true, { shape: 'open-1' })
 const isConnectorsOpen = atom({ plugin: 'narsil-check', key: 'isConnectorsOpen' } as const, false, { shape: 'open-1' })
 const SESSION_MS = 15_000
+// Pendientes: the list, whether it is unfolded, and the tasks whose content shows.
+const todos = atom({ plugin: 'narsil-check', key: 'todos' } as const, { isLoaded: false, tasks: [] } as Todos, { shape: 'todos-1' })
+const isTodosOpen = atom({ plugin: 'narsil-check', key: 'isTodosOpen' } as const, false, { shape: 'open-1' })
+const openTodos = atom({ plugin: 'narsil-check', key: 'openTodos' } as const, [] as string[], { shape: 'ids-1' })
 
 // Haiku reads each major jump once: its reading is kept in the store for good.
 const EXPLAIN_CONCURRENCY = 2
@@ -836,9 +841,129 @@ async function openTerminal($: EngineInterface, view: SessionView): Promise<void
   }
 }
 
+// The project's root, where its list lives: git's top level, else the
+// session's folder. Forward slashes, so a path joins the same on any system.
+async function projectRoot($: EngineInterface, cwd?: string): Promise<string> {
+  const top = await $.process
+    .run(['git', 'rev-parse', '--show-toplevel'], { timeoutMs: GIT_MS, ...(cwd ? { cwd } : {}) })
+    .then(r => (r.exitCode === 0 ? r.stdout.trim() : ''))
+    .catch(() => '')
+  const root = top || cwd || (await $.session.cwd().catch(() => '.'))
+  return root.replace(/\\/g, '/').replace(/\/$/, '')
+}
+
+// Keeps a project's list out of git through its local exclude file; a folder
+// that is no repository has nothing to keep it out of.
+async function excludeTodos($: EngineInterface, root: string): Promise<void> {
+  const ran = await $.process.run(['git', 'rev-parse', '--git-path', 'info/exclude'], { timeoutMs: GIT_MS, cwd: root }).catch(() => undefined)
+  if (!ran || ran.exitCode !== 0) return
+  const rel = ran.stdout.trim().replace(/\\/g, '/')
+  const path = /^([A-Za-z]:)?\//.test(rel) ? rel : `${root}/${rel}`
+  const text = (await $.fs.exists(path)) ? await $.fs.read(path) : ''
+  const next = withExclude(text)
+  if (next !== undefined) await $.fs.write(path, next)
+}
+
+async function readTodos($: EngineInterface, root: string): Promise<Task[]> {
+  const path = `${root}/${TODO_FILE}`
+  return (await $.fs.exists(path)) ? parseTodos(await $.fs.read(path)) : []
+}
+
+// One change to a list at a time, each on the file as it stands now, so a
+// change made elsewhere (another session, by hand) is never written over.
+let todoChain: Promise<unknown> = Promise.resolve()
+
+function changeTodos<T>($: EngineInterface, root: string, fn: (tasks: Task[]) => { tasks: Task[]; value: T }): Promise<T> {
+  const run = todoChain.then(async () => {
+    const { tasks, value } = fn(await readTodos($, root))
+    await excludeTodos($, root)
+    await $.fs.write(`${root}/${TODO_FILE}`, serializeTodos(tasks))
+    if (root === (await projectRoot($))) await update($, todos, () => ({ isLoaded: true, tasks }))
+    return value
+  })
+  todoChain = run.catch(() => undefined)
+  return run
+}
+
+async function loadTodos($: EngineInterface): Promise<Task[]> {
+  try {
+    const tasks = await readTodos($, await projectRoot($))
+    await update($, todos, () => ({ isLoaded: true, tasks }))
+    return tasks
+  } catch (err) {
+    await update($, todos, () => ({ isLoaded: true, tasks: [], error: errorText(err) }))
+    return []
+  }
+}
+
+async function addTodo($: EngineInterface, name: string, content?: string, root?: string): Promise<Task> {
+  const task = newTask(name, content, Date.now(), Math.random())
+  return changeTodos($, root ?? (await projectRoot($)), tasks => ({ tasks: [...tasks, task], value: task }))
+}
+
+async function finishTodo($: EngineInterface, ref: string): Promise<Task | undefined> {
+  return changeTodos($, await projectRoot($), tasks => {
+    const done = findTask(tasks, ref)
+    return { tasks: done ? tasks.filter(t => t !== done) : tasks, value: done }
+  })
+}
+
+// The folder a template's name points to: an absolute path as given, else a
+// folder beside this project. Says why when there is none or several.
+async function templateDir($: EngineInterface, template: string): Promise<{ dir: string } | { error: string }> {
+  const given = template.trim().replace(/\\/g, '/').replace(/\/$/, '')
+  if (/^([A-Za-z]:)?\//.test(given)) return (await $.fs.exists(given)) ? { dir: given } : { error: `No folder at ${given}.` }
+  const root = await projectRoot($)
+  const parent = root.replace(/\/[^/]+$/, '')
+  const folders = (await $.fs.list(parent)).filter(f => f.kind === 'dir').map(f => f.name)
+  const found = templateMatches(folders, given)
+  if (found.length === 1) return { dir: `${parent}/${found[0]}` }
+  if (found.length === 0) return { error: `No folder named like "${given}" in ${parent}. Ask the user which template it is.` }
+  return { error: `Several folders in ${parent} match "${given}": ${found.join(', ')}. Ask the user which one.` }
+}
+
+const toolText = (text: string, isError = false) => ({ result: { content: [{ type: 'text', text }], isError } })
+
+// Claude's tools over the list: behind ToolSearch, so they cost nothing
+// until used. A failure here leaves the rest of the pane untouched.
+async function registerTools($: EngineInterface): Promise<void> {
+  await $.tool.register({
+    name: TOOL_LIST,
+    description: "List this project's pending tasks (the Narsil Check pane's Pendientes): id, name and content of each.",
+  })
+  await $.tool.register({
+    name: TOOL_ADD,
+    description: "Add a task to this project's Pendientes list in the Narsil Check pane. Use it when the user asks to note something to do later.",
+    inputSchema: { type: 'object', properties: { name: { type: 'string', description: 'Short task name' }, content: { type: 'string', description: 'Optional details' } }, required: ['name'] },
+  })
+  await $.tool.register({
+    name: TOOL_DONE,
+    description: "Remove a finished task from this project's Pendientes list. Call it when you complete a task that is on the list.",
+    inputSchema: { type: 'object', properties: { task: { type: 'string', description: 'The task id, or its exact name' } }, required: ['task'] },
+  })
+  await $.tool.register({
+    name: TOOL_TEMPLATE,
+    description: "Add a task to the Pendientes list of another project, usually the template this project was created from (e.g. backendTemplate). `template` is that project's folder name (a folder beside this project) or its absolute path.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        template: { type: 'string', description: 'Folder name beside this project, or absolute path' },
+        name: { type: 'string', description: 'Short task name' },
+        content: { type: 'string', description: 'What to do and how it was done here: changes, files, problems and fixes' },
+      },
+      required: ['template', 'name'],
+    },
+  })
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: COMMAND, description: COMMAND_HELP, argumentHint: 'upgrade | vulns' })
+    await $.command.register({ name: COMMAND, description: COMMAND_HELP, argumentHint: 'upgrade | vulns | template "…"' })
+    void registerTools($).catch(() => undefined)
+    // Pendientes opens when it holds something.
+    void loadTodos($)
+      .then(tasks => update($, isTodosOpen, () => tasks.length > 0))
+      .catch(() => undefined)
     // Every session starts the same: Entorno open, Conectores folded, and
     // Actualizaciones and Vulnerabilidades folded until they find something.
     await update($, isEnvOpen, () => true)
@@ -862,7 +987,44 @@ export const register: Register = on => {
 
   // /narsil-check <check>, as /narsil <option>: each check by name, and the
   // list of them for anything else.
+  on('tool.call', { tool: `mcp__narsil-check__${TOOL_LIST}` }, async $ => toolText(todosText(await readTodos($, await projectRoot($)))))
+
+  on('tool.call', { tool: `mcp__narsil-check__${TOOL_ADD}` }, async ($, e) => {
+    const input = e as unknown as { name?: unknown; content?: unknown }
+    if (typeof input.name !== 'string' || !input.name.trim()) return toolText('A task needs a name.', true)
+    const task = await addTodo($, input.name, typeof input.content === 'string' ? input.content : undefined)
+    return toolText(`Added [${task.id}] ${task.name}.`)
+  })
+
+  on('tool.call', { tool: `mcp__narsil-check__${TOOL_DONE}` }, async ($, e) => {
+    const ref = (e as unknown as { task?: unknown }).task
+    if (typeof ref !== 'string' || !ref.trim()) return toolText('Name the task by its id or name.', true)
+    const done = await finishTodo($, ref)
+    return done ? toolText(`Removed [${done.id}] ${done.name}.`) : toolText(`No pending task "${ref}". Call ${TOOL_LIST} to see them.`, true)
+  })
+
+  on('tool.call', { tool: `mcp__narsil-check__${TOOL_TEMPLATE}` }, async ($, e) => {
+    const input = e as unknown as { template?: unknown; name?: unknown; content?: unknown }
+    if (typeof input.template !== 'string' || !input.template.trim()) return toolText('Name the template folder.', true)
+    if (typeof input.name !== 'string' || !input.name.trim()) return toolText('A task needs a name.', true)
+    const found = await templateDir($, input.template)
+    if ('error' in found) return toolText(found.error, true)
+    const task = await addTodo($, input.name, typeof input.content === 'string' ? input.content : undefined, found.dir)
+    return toolText(`Added [${task.id}] ${task.name} to ${found.dir}/${TODO_FILE}.`)
+  })
+
   on('command.run', { command: COMMAND }, async ($, e) => {
+    // /narsil-check template "<text>": Claude finds the template and writes
+    // the task, since only Claude knows how the work here was done.
+    const request = templateArg(e.args)
+    if (request !== undefined) {
+      if (!request) return { text: 'Narsil Check: escribe la tarea entre comillas, por ejemplo /narsil-check template "en backendTemplate crea la tarea de actualizar TypeScript a 7.0.0, explica lo que hicimos".' }
+      void $.clock
+        .sleep(0)
+        .then(() => $.prompt.submit({ text: templatePrompt(request) }))
+        .catch(err => $.ui.toast(`No pude pasarle la tarea a Claude: ${errorText(err)}`))
+      return { text: 'Narsil Check: le paso la tarea a Claude para la plantilla.' }
+    }
     const arg = e.args.trim().toLowerCase().replace(/\s+/g, ' ')
     if (arg === 'upgrade') {
       await update($, isUpgradeOpen, () => true)
@@ -880,7 +1042,10 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Link } = $.ui.resolve(e)
+    const elements = $.ui.resolve(e)
+    const { Box, Text, Button, Link } = elements
+    // The mobile app draws no text field: there tasks are added through Claude.
+    const Input = 'Input' in elements ? elements.Input : undefined
     const state = await read($, scan)
     const work = await read($, job)
     const waiting = await read($, pending)
@@ -1089,6 +1254,60 @@ export const register: Register = on => {
       )
     })()
 
+    // Pendientes, last: ○ finishes a task, its name shows or hides its content,
+    // and the field adds one as "nombre: contenido".
+    const list = await read($, todos)
+    const todosOpen = await read($, isTodosOpen)
+    const shown = new Set(await read($, openTodos))
+    const toggleTodos = async () => {
+      const open = await update($, isTodosOpen, value => !value)
+      if (open) await loadTodos($)
+    }
+    const toggleTask = (id: string) => update($, openTodos, ids => (ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id]))
+    const finish = async (id: string) => {
+      await finishTodo($, id).catch(err => $.ui.toast(`No pude guardar Pendientes: ${errorText(err)}`))
+      await update($, openTodos, ids => ids.filter(i => i !== id))
+    }
+    const add = async (text: string) => {
+      const entry = parseEntry(text)
+      if (!entry) return
+      await addTodo($, entry.name, entry.content).catch(err => $.ui.toast(`No pude guardar Pendientes: ${errorText(err)}`))
+    }
+    const todosSection = (
+      <Box flexDirection="column">
+        <Box flexDirection="row" gap={1} marginTop={1}>
+          <Text bold color={todosColor(list.tasks.length)}>
+            ●
+          </Text>
+          <Button key="section-todos" plain label={todosLabel(todosOpen, list.tasks.length)} onPress={toggleTodos} />
+        </Box>
+        {todosOpen && (
+          <Box flexDirection="column">
+            {list.error && <Text color={PALETTE.error}>No pude leer Pendientes: {list.error}</Text>}
+            {list.tasks.map(t => (
+              <Box flexDirection="column">
+                <Box flexDirection="row" gap={1}>
+                  <Button key={`todo-done-${t.id}`} plain label="○" onPress={() => finish(t.id)} />
+                  {t.content ? (
+                    <Button key={`todo-${t.id}`} plain label={`${shown.has(t.id) ? '▾' : '▸'} ${t.name}`} onPress={() => toggleTask(t.id)} />
+                  ) : (
+                    <Text>{t.name}</Text>
+                  )}
+                </Box>
+                {t.content && shown.has(t.id) && (
+                  <Box marginLeft={4}>
+                    <Text dimColor>{t.content}</Text>
+                  </Box>
+                )}
+              </Box>
+            ))}
+            {Input && <Input key="todo-new" placeholder="Nueva tarea (nombre: contenido)" submitLabel="Agregar" value="" onSubmit={(text: string) => add(text)} />}
+            {!Input && list.tasks.length === 0 && <Text dimColor>No hay tareas pendientes.</Text>}
+          </Box>
+        )}
+      </Box>
+    )
+
     const frame = (body: JSX.Element) => (
       <Box flexDirection="column">
         {head}
@@ -1097,6 +1316,7 @@ export const register: Register = on => {
         {isOpen ? body : null}
         {vulnsSection}
         {vulnsOpen ? vulnsBody : null}
+        {todosSection}
       </Box>
     )
 

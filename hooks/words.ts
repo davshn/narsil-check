@@ -7,11 +7,12 @@ import { SEVERITIES, SEVERITY_TITLE, worstOf } from './osv'
 export const PANE = 'narsil-check'
 export const TITLE = 'Narsil Check'
 export const COMMAND = 'narsil-check'
-export const COMMAND_HELP = 'Narsil Check, revisiones del proyecto: upgrade | vulns'
+export const COMMAND_HELP = 'Narsil Check, revisiones del proyecto: upgrade | vulns | template "…"'
 
 // What /narsil-check says to anything but a check it knows.
 export function commandHelp(arg: string): string {
-  const known = '/narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas.'
+  const known =
+    '/narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas. /narsil-check template "…": una tarea en Pendientes de una plantilla.'
   return arg ? `Narsil Check: no conozco "${arg}". Revisiones: ${known}` : `Narsil Check: revisiones del proyecto. ${known}`
 }
 

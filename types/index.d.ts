@@ -105,6 +105,11 @@ export type SessionView = {
   isSwitching: boolean
 }
 
+// A pending task: a name, and optionally what it is about. The list lives in
+// the project's untracked .atl/narsil-check/pendientes.json.
+export type Task = { id: string; name: string; content?: string }
+export type Todos = { isLoaded: boolean; tasks: Task[]; error?: string }
+
 declare module 'claude-code' {
   interface PluginState {
     'narsil-check': {
@@ -119,6 +124,9 @@ declare module 'claude-code' {
       session: Shaped<SessionView>
       isEnvOpen: Shaped<boolean>
       isConnectorsOpen: Shaped<boolean>
+      todos: Shaped<Todos>
+      isTodosOpen: Shaped<boolean>
+      openTodos: Shaped<string[]>
     }
   }
 }

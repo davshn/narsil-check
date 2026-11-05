@@ -5,7 +5,7 @@
   <img src="https://raw.githubusercontent.com/davshn/narsil-pet/main/assets/readme/searching-oscuro.svg" width="150" alt="Narsil revisando el proyecto (modo oscuro)">
 </p>
 
-Narsil Check es el compañero de [Narsil](https://github.com/davshn/narsil-pet): un panel lateral, con sus mismos colores, que revisa el proyecto en el que trabajas. Muestra el entorno de la sesión (repositorio, carpeta, rama, conectores y control remoto), qué librerías se pueden actualizar y cuánto cuesta hacerlo, y qué vulnerabilidades conocidas tienen los paquetes instalados. Con él puedes ocultar la barra de sesión de la app de escritorio y quedarte con un solo panel.
+Narsil Check es el compañero de [Narsil](https://github.com/davshn/narsil-pet): un panel lateral, con sus mismos colores, que revisa el proyecto en el que trabajas. Muestra el entorno de la sesión (repositorio, carpeta, rama, conectores y control remoto), qué librerías se pueden actualizar y cuánto cuesta hacerlo, qué vulnerabilidades conocidas tienen los paquetes instalados y una lista de tareas pendientes del proyecto. Con él puedes ocultar la barra de sesión de la app de escritorio y quedarte con un solo panel.
 
 Lee proyectos de JavaScript y TypeScript (npm y Expo), Python (PyPI), Go, Rust (Cargo), Dart o Flutter (Pub), Kotlin y Java (Gradle y Maven), C# (NuGet), Ruby (RubyGems) y Swift (SwiftPM).
 
@@ -26,7 +26,7 @@ Es un mod de Claude Code de **código abierto**, publicado bajo la licencia [GPL
 ### El panel
 El panel se abre al empezar cada sesión, aunque no haya nada que revisar. Arriba dice **● Narsil Check** y debajo tiene cada revisión como una sección que se pliega y se despliega con su cabecera (`▾ Actualizaciones · 3` / `▸ Actualizaciones · 3`). El punto de color de cada sección dice lo más urgente que tiene, con la paleta de Narsil: rojo si algo bloquea o falla, amarillo si algo te espera, verde si está al día y azul para lo informativo.
 
-Cada sesión empieza igual: **Entorno** desplegado, **Conectores** plegado, y **Actualizaciones** y **Vulnerabilidades** plegadas hasta que encuentran algo, momento en que se despliegan solas.
+Cada sesión empieza igual: **Entorno** desplegado, **Conectores** plegado, y **Actualizaciones**, **Vulnerabilidades** y **Pendientes** plegadas hasta que tienen algo, momento en que se despliegan solas.
 
 ### Entorno
 Lo que enseña la barra de sesión de la app de escritorio, para que puedas ocultarla:
@@ -115,6 +115,33 @@ La sección **Vulnerabilidades** lista las vulnerabilidades conocidas de los paq
 
 El número de vulnerabilidades es el de avisos, no el de paquetes: `npm audit` cuenta además los paquetes que solo dependen de uno vulnerable, que aquí no se repiten.
 
+### Pendientes
+Una lista de tareas del proyecto para apuntar lo que se te ocurre mientras trabajas en otra cosa. Cada tarea tiene un nombre y, si quieres, un contenido:
+
+```
+▾ Pendientes · 2
+  ○ ▾ Subir TypeScript a 7.0.0
+       En narsil-check hubo que cambiar moduleResolution a bundler…
+  ○ Revisar el README
+  [ Nueva tarea (nombre: contenido) ]
+```
+
+- **Añadir**: escribe en el campo y pulsa Enter. Lo que va después de los primeros dos puntos es el contenido (`Subir TypeScript: revisar los tipos`); sin dos puntos, la tarea solo tiene nombre.
+- **Leer**: un clic en el nombre muestra u oculta el contenido. Una tarea sin contenido no se despliega.
+- **Terminar**: un clic en `○` la quita de la lista. No se guarda historial de tareas hechas.
+- **Con Claude**: Claude tiene sus propias herramientas para listar, añadir y terminar tareas (`todo_list`, `todo_add`, `todo_done`). Pídele "apunta en pendientes…" o "haz la tarea de…", y la tacha él mismo al terminarla. No las lee en cada mensaje, así que no gastan contexto hasta que las usa.
+
+La lista se guarda en `.atl/narsil-check/pendientes.json`, dentro del proyecto. La primera vez, el panel añade esa carpeta a `.git/info/exclude`, la lista de archivos ignorados local de git: nunca entra en un commit y no toca tu `.gitignore`. Se lee al empezar la sesión y se escribe con cada cambio, siempre sobre el archivo tal como está, así que puedes añadir o terminar tareas mientras Claude trabaja, y una tarea que otra sesión haya añadido no se pierde.
+
+#### Tareas para una plantilla
+Cuando en un proyecto haces algo que también conviene hacer en la plantilla de la que salió (por ejemplo, una actualización complicada), díselo a Claude con:
+
+```
+/narsil-check template "en backendTemplate crea la tarea de actualizar TypeScript a 7.0.0, explica lo que tuviste que hacer"
+```
+
+Claude busca la carpeta de la plantilla junto a este proyecto (sin distinguir mayúsculas, guiones ni espacios; también acepta una ruta absoluta), escribe la explicación, porque sabe cómo se hizo, y crea la tarea en **Pendientes** de la plantilla con la herramienta `todo_add_to_template`. Si no encuentra la carpeta o hay varias parecidas, te pregunta cuál es.
+
 ## Ecosistemas
 
 | Ecosistema | Lee | Versión instalada | Registro | El botón ejecuta |
@@ -168,6 +195,7 @@ Crear el PR necesita, además, [GitHub CLI](https://cli.github.com) (`gh`) insta
 | `/narsil-check` | Muestra la lista de revisiones. También responde así a un argumento que no conoce. |
 | `/narsil-check upgrade` | Abre el panel con **Actualizaciones** desplegada y vuelve a revisar. Es la forma de abrirlo de nuevo si lo cierras. |
 | `/narsil-check vulns` | Abre el panel con **Vulnerabilidades** desplegada y vuelve a consultar OSV.dev. |
+| `/narsil-check template "…"` | Le pide a Claude que cree una tarea, con su explicación, en **Pendientes** de una plantilla. |
 
 ## Sistemas compatibles
 
@@ -179,6 +207,7 @@ Actualizaciones y Vulnerabilidades funcionan dondequiera que Claude Code dibuje 
 | Entorno y Conectores | Sí | No: la sección dice por qué no pudo leerlos |
 | Control remoto | Sí | No |
 | Clic en la carpeta y en la rama | Sí | No |
+| Pendientes | Sí | Sí; en la app móvil no hay campo para escribir: las tareas se añaden pidiéndoselo a Claude |
 
 ## Desarrollo
 
@@ -195,6 +224,7 @@ claude plugin test .
 - `hooks/register.tsx`: los hooks del mod (el panel, sus secciones, los botones y los comandos).
 - `hooks/words.ts`: cómo lo dice el panel (nombres de las secciones, colores, resúmenes, ayuda del comando).
 - `hooks/session.ts`: la sección de la sesión (Entorno, Conectores y el interruptor del control remoto).
+- `hooks/todos.ts`: Pendientes (el archivo de la lista, el formato `nombre: contenido`, la exclusión de git y la búsqueda de plantillas).
 - `hooks/ecosystems.ts` y `hooks/adapter.ts`: la lista de ecosistemas y lo que cada uno tiene que saber hacer.
 - `hooks/npm.ts`, `pypi.ts`, `golang.ts`, `cargo.ts`, `pub.ts`, `maven.ts`, `nuget.ts`, `rubygems.ts` y `swiftpm.ts`: cada ecosistema (leer el manifest, preguntar al registro y reescribir la versión).
 - `hooks/semver.ts` y `hooks/toml.ts`: las versiones y los rangos, y la lectura de TOML.
