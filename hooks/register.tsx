@@ -445,7 +445,9 @@ async function checkPending($: EngineInterface): Promise<void> {
         changed = true
       }
       if (!changed) continue
-      tracked.push(...adapter.lockfiles)
+      // Its lockfiles, at the root and wherever the tree holds them (an
+      // Xcode project keeps Package.resolved inside its workspace).
+      tracked.push(...adapter.lockfiles, ...present.filter(p => adapter.lockfiles.some(l => p.endsWith(`/${l}`))))
       managers.push(adapter.managerOf(present))
     }
     if (changes.length > 0) {
