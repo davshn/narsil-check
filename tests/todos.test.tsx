@@ -66,8 +66,14 @@ function project(on: On, files: Record<string, string> = {}, readOnly: string[] 
   return { fs, prompts, toasts }
 }
 
-// What a tool answered, as the model reads it.
-const textOf = (r: { result?: unknown }) => (r.result as { content: { text: string }[] }).content[0]?.text
+// What a tool answered, as the model reads it. The engine takes a hook's
+// answer only as a string result or a deny: anything else fails the call in a
+// session (an MCP-style { content, isError } object did), so it fails here too.
+function textOf(r: { result?: unknown; deny?: string }): string {
+  if (typeof r.deny === 'string') return r.deny
+  if (typeof r.result !== 'string') throw new Error(`a tool answered with a result the engine refuses: ${JSON.stringify(r.result)}`)
+  return r.result
+}
 
 const saved = (tasks: { id: string; name: string; content?: string }[]) => serializeTodos(tasks)
 
@@ -282,7 +288,8 @@ test("a list that cannot be written gives Claude a readable error, and the pane 
   const added = await $.tool.call({ tool: 'mcp__narsil-check__todo_add', tool_use_id: 'u1', name: 'Uno' })
   // The failed write reaches the mod as an error; its words are the engine's.
   expect(textOf(added)).toMatch(/^The Pendientes list could not be changed: .+/)
-  expect((added.result as { isError: boolean }).isError).toBe(true)
+  // An error is a deny: the model reads it as an error result.
+  expect((added as { deny?: string }).deny).toMatch(/^The Pendientes list could not be changed/)
 
   await until($, 'section-todos')
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })

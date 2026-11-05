@@ -945,11 +945,15 @@ async function templateDir($: EngineInterface, template: string): Promise<{ dir:
   return { error: `Several folders in ${parent} match "${given}": ${found.join(', ')}. Ask the user which one.` }
 }
 
-const toolText = (text: string, isError = false) => ({ result: { content: [{ type: 'text', text }], isError } })
+// A tool's answer as the engine takes it from a tool.call hook: the text as
+// the result, or, for an error, as a refusal the model reads as an error
+// result. An MCP-style { content, isError } object is refused by the engine.
+type ToolAnswer = { result: string } | { deny: string }
+const toolText = (text: string, isError = false): ToolAnswer => (isError ? { deny: text } : { result: text })
 
 // A tool's answer, with any failure on the way (a file that cannot be read or
 // written) turned into an error Claude can read and tell the user about.
-async function answered(fn: () => Promise<ReturnType<typeof toolText>>): Promise<ReturnType<typeof toolText>> {
+async function answered(fn: () => Promise<ToolAnswer>): Promise<ToolAnswer> {
   try {
     return await fn()
   } catch (err) {

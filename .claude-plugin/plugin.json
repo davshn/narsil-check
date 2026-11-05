@@ -1,6 +1,6 @@
 {
   "name": "narsil-check",
-  "version": "0.19.1",
+  "version": "0.19.2",
   "description": "Narsil Check: a side pane in Narsil's colors with the session, library upgrades, known vulnerabilities and the project's pending tasks",
   "author": {
     "name": "Davshn"
