@@ -17,7 +17,8 @@ const LIST = 'E:/Proyectos/app/.atl/narsil-check/pendientes.json'
 const EXCLUDE = 'E:/Proyectos/app/.git/info/exclude'
 
 // A project at E:/Proyectos/app beside two templates, its files in memory.
-function project(on: On, files: Record<string, string> = {}) {
+// `readOnly`: paths whose write fails, as a locked or read-only file does.
+function project(on: On, files: Record<string, string> = {}, readOnly: string[] = []) {
   const fs = new Map(Object.entries(files))
   const prompts: string[] = []
   const toasts: string[] = []
@@ -31,6 +32,7 @@ function project(on: On, files: Record<string, string> = {}) {
     return { value: text }
   })
   on('fs.write', (_, e) => {
+    if (readOnly.includes(at(e.path))) throw new Error(`EPERM: ${e.path}`)
     fs.set(at(e.path), e.text)
     return { value: undefined }
   })
@@ -227,4 +229,96 @@ test('/narsil-check template hands the request to Claude, who knows how the work
 
   const empty = await $.command.run({ command: 'narsil-check', args: 'template', ...TYPED })
   expect((empty as { text: string }).text).toMatch(/^Narsil Check: escribe la tarea entre comillas/)
+})
+
+test('a damaged list is left as it is and said so; the next change keeps a copy of it before starting a new list', async ($, on) => {
+  const { fs } = project(on, { [LIST]: '{"tasks": [ broken' })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await until($, 'section-todos')
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'section-todos' })
+  expect((await ui.find({ type: 'Text', text: /no se puede leer/ }))?.text).toBe(
+    '.atl/narsil-check/pendientes.json no se puede leer (no es JSON válido). No lo toco: corrígelo, o añade una tarea y guardaré una copia del archivo antes de empezar una lista nueva.',
+  )
+  // Reading it changed nothing.
+  expect(fs.get(LIST)).toBe('{"tasks": [ broken')
+
+  await ui.input({ key: 'todo-new', text: 'Revisar el README' })
+  const copies = [...fs.keys()].filter(k => /\/\.atl\/narsil-check\/pendientes\.danado-[\dT-]+Z\.json$/.test(k))
+  expect(copies).toHaveLength(1)
+  expect(fs.get(copies[0] as string)).toBe('{"tasks": [ broken')
+  expect(parseTodos(fs.get(LIST)).map(t => t.name)).toEqual(['Revisar el README'])
+  expect((await ui.find({ type: 'Text', text: /estaba dañado/ }))?.text).toMatch(/^\.atl\/narsil-check\/pendientes\.json estaba dañado \(no es JSON válido\): guardé una copia en \.atl\/narsil-check\/pendientes\.danado-.+\.json y empecé una lista nueva\.$/)
+  expect(await ui.find({ type: 'Text', text: /no se puede leer/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('Claude is told about a damaged list instead of reading it as empty', async ($, on) => {
+  const { fs } = project(on, { [LIST]: '{"version":1}' })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+
+  const listed = await $.tool.call({ tool: 'mcp__narsil-check__todo_list', tool_use_id: 'u1' })
+  expect(textOf(listed)).toBe('.atl/narsil-check/pendientes.json cannot be read (no tiene la lista "tasks"). Tell the user; a change will keep a copy of it and start a new list.')
+  const added = await $.tool.call({ tool: 'mcp__narsil-check__todo_add', tool_use_id: 'u2', name: 'Uno' })
+  expect(textOf(added)).toMatch(/^Added \[\w+\] Uno\. Note for the user: \.atl\/narsil-check\/pendientes\.json estaba dañado/)
+  expect([...fs.values()]).toContain('{"version":1}')
+})
+
+test('a git exclude file that cannot be written does not stop the task from being saved', async ($, on) => {
+  const { fs } = project(on, {}, [EXCLUDE])
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+
+  const added = await $.tool.call({ tool: 'mcp__narsil-check__todo_add', tool_use_id: 'u1', name: 'Uno' })
+  expect(textOf(added)).toMatch(/^Added \[\w+\] Uno\.$/)
+  expect(parseTodos(fs.get(LIST)).map(t => t.name)).toEqual(['Uno'])
+  expect(fs.has(EXCLUDE)).toBe(false)
+})
+
+test("a list that cannot be written gives Claude a readable error, and the pane a toast", async ($, on) => {
+  const { toasts } = project(on, {}, [LIST])
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+
+  const added = await $.tool.call({ tool: 'mcp__narsil-check__todo_add', tool_use_id: 'u1', name: 'Uno' })
+  // The failed write reaches the mod as an error; its words are the engine's.
+  expect(textOf(added)).toMatch(/^The Pendientes list could not be changed: .+/)
+  expect((added.result as { isError: boolean }).isError).toBe(true)
+
+  await until($, 'section-todos')
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'section-todos' })
+  await ui.input({ key: 'todo-new', text: 'Dos' })
+  await ui.unmount()
+  expect(toasts.at(-1)).toMatch(/^No pude guardar Pendientes: .+/)
+})
+
+test('a template named by its absolute path is used as given; an unknown one asks the user', async ($, on) => {
+  const { fs } = project(on, { 'E:/Proyectos/mobileTemplate/package.json': '{}' })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+
+  const added = await $.tool.call({ tool: 'mcp__narsil-check__todo_add_to_template', tool_use_id: 'u1', template: 'E:\\Proyectos\\mobileTemplate', name: 'Uno' })
+  expect(textOf(added)).toMatch(/to E:\/Proyectos\/mobileTemplate\/\.atl\/narsil-check\/pendientes\.json\.$/)
+  expect(parseTodos(fs.get('E:/Proyectos/mobileTemplate/.atl/narsil-check/pendientes.json')).map(t => t.name)).toEqual(['Uno'])
+
+  const gone = await $.tool.call({ tool: 'mcp__narsil-check__todo_add_to_template', tool_use_id: 'u2', template: 'E:/Proyectos/landing', name: 'x' })
+  expect(textOf(gone)).toBe('No folder at E:/Proyectos/landing.')
+  const unknown = await $.tool.call({ tool: 'mcp__narsil-check__todo_add_to_template', tool_use_id: 'u3', template: 'landing', name: 'x' })
+  expect(textOf(unknown)).toBe('No folder named like "landing" in E:/Proyectos. Ask the user which template it is.')
+})
+
+test('the mobile app has no text field: an empty list says so, and tasks still finish with ○', async ($, on) => {
+  project(on, { [LIST]: saved([{ id: 't1', name: 'Uno' }]) })
+  await $.session.start({ cwd: '/', surface: 'mobile', isInteractive: true })
+  await until($, 'todo-done-t1')
+
+  const phone = await $.ui.mount({ ...PANE, surface: 'mobile' })
+  expect(await phone.find({ type: 'Input' })).toBeUndefined()
+  await phone.press({ key: 'todo-done-t1' })
+  expect((await phone.find({ type: 'Text', text: /No hay tareas/ }))?.text).toBe('No hay tareas pendientes.')
+  await phone.unmount()
+  // Where the field is drawn, it says enough by itself.
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await desk.find({ type: 'Text', text: /No hay tareas/ })).toBeUndefined()
+  expect(await desk.find({ type: 'Input', key: 'todo-new' })).toBeDefined()
+  await desk.unmount()
 })

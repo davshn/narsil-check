@@ -131,7 +131,11 @@ Una lista de tareas del proyecto para apuntar lo que se te ocurre mientras traba
 - **Terminar**: un clic en `○` la quita de la lista. No se guarda historial de tareas hechas.
 - **Con Claude**: Claude tiene sus propias herramientas para listar, añadir y terminar tareas (`todo_list`, `todo_add`, `todo_done`). Pídele "apunta en pendientes…" o "haz la tarea de…", y la tacha él mismo al terminarla. No las lee en cada mensaje, así que no gastan contexto hasta que las usa.
 
-La lista se guarda en `.atl/narsil-check/pendientes.json`, dentro del proyecto. La primera vez, el panel añade esa carpeta a `.git/info/exclude`, la lista de archivos ignorados local de git: nunca entra en un commit y no toca tu `.gitignore`. Se lee al empezar la sesión y se escribe con cada cambio, siempre sobre el archivo tal como está, así que puedes añadir o terminar tareas mientras Claude trabaja, y una tarea que otra sesión haya añadido no se pierde.
+La lista se guarda en `.atl/narsil-check/pendientes.json`, dentro del proyecto. La primera vez, el panel añade esa carpeta a `.git/info/exclude`, la lista de archivos ignorados local de git: nunca entra en un commit y no toca tu `.gitignore`. Si ese archivo no se puede escribir, la tarea se guarda igual.
+
+Se lee al empezar la sesión y se escribe con cada cambio. Dentro de una sesión los cambios van de uno en uno y cada uno vuelve a leer el archivo justo antes de escribirlo, así que puedes añadir o terminar tareas mientras Claude trabaja, y una tarea que otra sesión haya guardado antes no se pierde. Lo que no está protegido es que dos sesiones del mismo proyecto escriban en el mismo instante: entonces el último cambio puede pisar al otro.
+
+Si el archivo se daña (por ejemplo, tras editarlo a mano con un error), el panel no lo trata como una lista vacía: lo deja como está y dice que no se puede leer. Al siguiente cambio guarda una copia junto a él (`pendientes.danado-<fecha>.json`) y empieza una lista nueva, así que no se pierde nada.
 
 #### Tareas para una plantilla
 Cuando en un proyecto haces algo que también conviene hacer en la plantilla de la que salió (por ejemplo, una actualización complicada), díselo a Claude con:

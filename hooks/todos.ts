@@ -18,24 +18,42 @@ export const TOOL_DONE = 'todo_done'
 export const TOOL_TEMPLATE = 'todo_add_to_template'
 
 // The tasks a file holds; a missing, empty or broken file holds none, and an
-// entry without a name is dropped.
+// entry without a name is dropped. To tell a broken file from an empty one,
+// read it with parseTodoFile.
 export function parseTodos(text: string | undefined): Task[] {
-  if (!text?.trim()) return []
+  const file = parseTodoFile(text)
+  return 'tasks' in file ? file.tasks : []
+}
+
+// The tasks a file holds, or why it cannot be read: a file that is there but
+// is no list must never be written over as if it were empty.
+export function parseTodoFile(text: string | undefined): { tasks: Task[] } | { error: string } {
+  if (!text?.trim()) return { tasks: [] }
   let value: unknown
   try {
     value = JSON.parse(text)
   } catch {
-    return []
+    return { error: 'no es JSON válido' }
   }
   const tasks = (value as { tasks?: unknown } | null)?.tasks
-  if (!Array.isArray(tasks)) return []
+  if (!Array.isArray(tasks)) return { error: 'no tiene la lista "tasks"' }
+  return { tasks: namedTasks(tasks) }
+}
+
+function namedTasks(tasks: unknown[]): Task[] {
   return tasks
-    .filter((t): t is Record<string, unknown> => typeof t === 'object' && t !== null && typeof t.name === 'string' && t.name.trim() !== '')
+    .filter((t): t is Record<string, unknown> => typeof t === 'object' && t !== null && typeof (t as Record<string, unknown>).name === 'string' && ((t as Record<string, unknown>).name as string).trim() !== '')
     .map(t => ({
       id: typeof t.id === 'string' && t.id ? t.id : (t.name as string),
       name: (t.name as string).trim(),
       ...(typeof t.content === 'string' && t.content.trim() ? { content: t.content.trim() } : {}),
     }))
+}
+
+// Where a damaged list is kept before a change starts a new one: beside it,
+// named by the moment (pendientes.danado-2026-11-05T06-52-40-000Z.json).
+export function damagedPath(now: number): string {
+  return `${TODO_DIR}/pendientes.danado-${new Date(now).toISOString().replace(/[:.]/g, '-')}.json`
 }
 
 export function serializeTodos(tasks: readonly Task[]): string {
