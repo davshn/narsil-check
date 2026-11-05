@@ -67,19 +67,15 @@ const pr = atom({ plugin: 'narsil-check', key: 'pr' } as const, { status: 'idle'
 const reasons = atom({ plugin: 'narsil-check', key: 'reasons' } as const, {} as Record<string, Explained>, { shape: 'reasons-1' })
 const audit = atom({ plugin: 'narsil-check', key: 'audit' } as const, { status: 'idle' } as Audit, { shape: 'audit-1' })
 // Whether the vulnerabilities section is open; kept in the store too.
-const isVulnsOpen = atom({ plugin: 'narsil-check', key: 'isVulnsOpen' } as const, true, { shape: 'open-1' })
-const VULNS_OPEN_KEY = 'section:vulns:open'
+const isVulnsOpen = atom({ plugin: 'narsil-check', key: 'isVulnsOpen' } as const, false, { shape: 'open-1' })
 const OSV_CONCURRENCY = 8
 const OSV_MS = 30_000
 // Whether the upgrade section is open; kept in the store across sessions.
-const isUpgradeOpen = atom({ plugin: 'narsil-check', key: 'isUpgradeOpen' } as const, true, { shape: 'open-1' })
-const OPEN_KEY = 'section:upgrade:open'
+const isUpgradeOpen = atom({ plugin: 'narsil-check', key: 'isUpgradeOpen' } as const, false, { shape: 'open-1' })
 // The session section: what the app's session bar shows, and its two folds.
 const session = atom({ plugin: 'narsil-check', key: 'session' } as const, NO_SESSION, { shape: 'session-2' })
-const isEnvOpen = atom({ plugin: 'narsil-check', key: 'isEnvOpen' } as const, false, { shape: 'open-1' })
-const ENV_OPEN_KEY = 'section:env:open'
+const isEnvOpen = atom({ plugin: 'narsil-check', key: 'isEnvOpen' } as const, true, { shape: 'open-1' })
 const isConnectorsOpen = atom({ plugin: 'narsil-check', key: 'isConnectorsOpen' } as const, false, { shape: 'open-1' })
-const CONNECTORS_OPEN_KEY = 'section:connectors:open'
 const SESSION_MS = 15_000
 
 // Haiku reads each major jump once: its reading is kept in the store for good.
@@ -315,8 +311,15 @@ async function expoTable($: EngineInterface, expo: string | undefined): Promise<
   return res.ok ? (JSON.parse(res.text) as Record<string, string>) : undefined
 }
 
-function setScan($: EngineInterface, value: Scan): Promise<Scan> {
-  return update($, scan, () => value)
+// A section opens by itself when a result first has something to show.
+const hasUpgrades = (value: Scan) => value.status === 'done' && value.upgrades.length > 0
+const hasFindings = (value: Audit) => value.status === 'done' && value.findings.length > 0
+
+async function setScan($: EngineInterface, value: Scan): Promise<Scan> {
+  const before = await read($, scan)
+  const after = await update($, scan, () => value)
+  if (hasUpgrades(after) && !hasUpgrades(before)) await update($, isUpgradeOpen, () => true)
+  return after
 }
 
 let running: Promise<void> | undefined
@@ -329,8 +332,11 @@ function runScan($: EngineInterface, isFresh = false): Promise<void> {
   return running
 }
 
-function setAudit($: EngineInterface, value: Audit): Promise<Audit> {
-  return update($, audit, () => value)
+async function setAudit($: EngineInterface, value: Audit): Promise<Audit> {
+  const before = await read($, audit)
+  const after = await update($, audit, () => value)
+  if (hasFindings(after) && !hasFindings(before)) await update($, isVulnsOpen, () => true)
+  return after
 }
 
 // What the vulnerabilities check asks about: every package each lockfile
@@ -815,15 +821,12 @@ async function openTerminal($: EngineInterface, view: SessionView): Promise<void
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: COMMAND, description: COMMAND_HELP, argumentHint: 'upgrade | vulns' })
-    // Each section opens or stays folded as it was left.
-    const open = await $.store.get(OPEN_KEY).catch(() => undefined)
-    if (typeof open === 'boolean') await update($, isUpgradeOpen, () => open)
-    const vulnsOpen = await $.store.get(VULNS_OPEN_KEY).catch(() => undefined)
-    if (typeof vulnsOpen === 'boolean') await update($, isVulnsOpen, () => vulnsOpen)
-    const envOpen = await $.store.get(ENV_OPEN_KEY).catch(() => undefined)
-    if (typeof envOpen === 'boolean') await update($, isEnvOpen, () => envOpen)
-    const connectorsOpen = await $.store.get(CONNECTORS_OPEN_KEY).catch(() => undefined)
-    if (typeof connectorsOpen === 'boolean') await update($, isConnectorsOpen, () => connectorsOpen)
+    // Every session starts the same: Entorno open, Conectores folded, and
+    // Actualizaciones and Vulnerabilidades folded until they find something.
+    await update($, isEnvOpen, () => true)
+    await update($, isConnectorsOpen, () => false)
+    await update($, isUpgradeOpen, () => false)
+    await update($, isVulnsOpen, () => false)
     void loadSession($).catch(() => undefined)
     // Opens on every session: it stands in for the app's session bar.
     await $.ui.open({ id: PANE, title: TITLE }).catch(() => undefined)
@@ -864,8 +867,7 @@ export const register: Register = on => {
     const prText = prNote(request)
     const isOpen = await read($, isUpgradeOpen)
     const toggle = async () => {
-      const open = await update($, isUpgradeOpen, value => !value)
-      await $.store.set(OPEN_KEY, open).catch(() => undefined)
+      await update($, isUpgradeOpen, value => !value)
     }
 
     // The pane's own head, as Narsil's band: a colored dot and its name.
@@ -895,21 +897,15 @@ export const register: Register = on => {
     const connectorsOpen = await read($, isConnectorsOpen)
     const toggleEnv = async () => {
       const open = await update($, isEnvOpen, value => !value)
-      await $.store.set(ENV_OPEN_KEY, open).catch(() => undefined)
       if (open) await loadSession($)
     }
     const toggleConnectors = async () => {
       const open = await update($, isConnectorsOpen, value => !value)
-      await $.store.set(CONNECTORS_OPEN_KEY, open).catch(() => undefined)
       if (open) await loadSession($)
     }
     const up = connected(view)
     const down = view.connectors.filter(c => c.status !== 'connected')
     const knob = switchGlyph(view)
-    // A connector's click opens /mcp, the menu of every MCP server.
-    const openMcp = () => {
-      void $.command.run({ command: 'mcp' }).catch(err => $.ui.toast(`No pude abrir los servidores MCP: ${errorText(err)}`))
-    }
     const sessionSection = (
       <Box flexDirection="column">
         <Box flexDirection="row" gap={1} marginTop={1}>
@@ -974,10 +970,10 @@ export const register: Register = on => {
             ) : (
               <Box flexDirection="column">
                 {[...up, ...down].map(c => (
-                  <Box flexDirection="row" gap={1}>
-                    <Text color={c.status === 'connected' ? PALETTE.done : PALETTE.waiting}>●</Text>
-                    <Button key={`connector-${c.name}`} plain label={connectorLine(c)} onPress={openMcp} />
-                  </Box>
+                  <Text>
+                    <Text color={c.status === 'connected' ? PALETTE.done : PALETTE.waiting}>● </Text>
+                    {connectorLine(c)}
+                  </Text>
                 ))}
               </Box>
             )}
@@ -993,8 +989,7 @@ export const register: Register = on => {
     const fixes = (u: Upgrade) => fixedBy(direct.get(`${u.ecosystem}:${u.name}`), u.latest)
     const vulnsOpen = await read($, isVulnsOpen)
     const toggleVulns = async () => {
-      const open = await update($, isVulnsOpen, value => !value)
-      await $.store.set(VULNS_OPEN_KEY, open).catch(() => undefined)
+      await update($, isVulnsOpen, value => !value)
     }
     const vulnsSection = (
       <Box flexDirection="row" gap={1} marginTop={1}>

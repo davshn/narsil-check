@@ -91,7 +91,7 @@ async function scanned($: Engine) {
 
 const TYPED = { origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } } as const
 
-test("the pane heads with Narsil Check, and the upgrade section folds, staying folded across sessions", async ($, on) => {
+test("the pane heads with Narsil Check, and the upgrade section opens when it finds upgrades and folds on a press", async ($, on) => {
   const { store } = project(on)
 
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
@@ -110,7 +110,6 @@ test("the pane heads with Narsil Check, and the upgrade section folds, staying f
   // Folded: the head stays, the section's body is gone.
   expect(await ui.find({ type: 'Text', text: /^zod/ })).toBeUndefined()
   expect((await ui.find({ type: 'Text', text: /Narsil Check/ }))?.text).toBe('● Narsil Check')
-  expect(store.get('section:upgrade:open')).toBe(false)
   await ui.unmount()
 })
 

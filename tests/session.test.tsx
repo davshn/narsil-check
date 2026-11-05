@@ -117,16 +117,15 @@ test('the session section reads the app servers and names what it found', () => 
   expect(switchGlyph({ ...view, remote: 'on', isSwitching: true })).toEqual({ knob: '━●━', color: '#F5B400', word: 'cambiando…' })
 })
 
-test('the pane opens with the session first: Entorno, then Conectores, above upgrades', async ($, on) => {
-  const { commands } = app(on, { state: 'off' })
+test('the pane opens with the session first: Entorno unfolded, then Conectores folded, above upgrades', async ($, on) => {
+  app(on, { state: 'off' })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await settled($, /Conectores · 2/)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const buttons = (await ui.findAll({ type: 'Button' })).map(b => b.text)
-  expect(buttons.slice(0, 3)).toEqual(['▸ Entorno', '▸ Conectores · 2', '▾ Actualizaciones'])
+  expect(buttons.slice(0, 6)).toEqual(['▾ Entorno', 'E:\\Proyectos\\app', 'feat/login', 'desactivado', '▸ Conectores · 2', '▸ Actualizaciones'])
 
-  await ui.press({ key: 'section-env' })
   // No environment line: the repository, folder, branch and Remote Control.
   expect(await ui.find({ type: 'Text', text: /Local/ })).toBeUndefined()
   const repo = await ui.find({ type: 'Link' })
@@ -136,12 +135,11 @@ test('the pane opens with the session first: Entorno, then Conectores, above upg
   expect((await ui.find({ type: 'Button', key: 'env-branch' }))?.text).toBe('feat/login')
 
   await ui.press({ key: 'section-connectors' })
-  expect((await ui.find({ type: 'Button', key: 'connector-engram' }))?.text).toBe('engram · 19 herramientas')
-  expect((await ui.find({ type: 'Button', key: 'connector-Gmail' }))?.text).toBe('Gmail · needs_auth')
-  // Any connector opens /mcp, the menu of every MCP server.
-  await ui.press({ key: 'connector-Gmail' })
+  expect((await ui.find({ type: 'Text', text: /engram/ }))?.text).toBe('● engram · 19 herramientas')
+  expect((await ui.find({ type: 'Text', text: /Gmail/ }))?.text).toBe('● Gmail · needs_auth')
+  // A connector's row is only shown: nothing to press.
+  expect(await ui.find({ type: 'Button', text: /engram|Gmail/ })).toBeUndefined()
   await ui.unmount()
-  expect(commands).toEqual(['mcp'])
 })
 
 test('the Remote Control switch turns it on through the app, then off again', async ($, on) => {
@@ -149,9 +147,8 @@ test('the Remote Control switch turns it on through the app, then off again', as
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await settled($, /Conectores · 2/)
 
-  // The switch lives in the Entorno fold.
+  // The switch lives in the Entorno fold, open from the start.
   let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'section-env' })
   expect((await ui.find({ type: 'Text', text: '●━━' }))?.props.color).toBe('#8A90A6')
   await ui.press({ key: 'remote-switch' })
   await ui.unmount()
@@ -173,7 +170,6 @@ test('the folder picks a new working folder and moves there; the branch opens a 
   await settled($, /Conectores · 2/)
 
   let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'section-env' })
   await ui.press({ key: 'env-branch' })
   expect(calls.filter(c => c.server === 'terminal')).toEqual([{ server: 'terminal', tool: 'open_terminal_tab', args: { title: 'feat/login', cwd: 'E:\\Proyectos\\app' } }])
 
@@ -196,7 +192,6 @@ test('a server the mod cannot reach says why instead of staying empty', async ($
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'section-connectors' })
-  await ui.press({ key: 'section-env' })
   // A failed call reaches the plugin as an error; its words are the engine's.
   expect((await ui.find({ type: 'Text', text: /conectores:/ }))?.text).toMatch(/^No pude leer los conectores: .+/)
   expect((await ui.find({ type: 'Text', text: /control remoto:/ }))?.text).toMatch(/^No pude leer o cambiar el control remoto: .+/)

@@ -287,7 +287,11 @@ test('the pane opens even when everything is current, and /upgrades opens it aga
   await scanned($)
   expect(opened).toEqual(['narsil-check'])
 
+  // Nothing to upgrade: the section stays folded until opened.
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Button', key: 'section-upgrade' }))?.text).toBe('▸ Actualizaciones')
+  expect(await ui.find({ type: 'Text', text: /al día/ })).toBeUndefined()
+  await ui.press({ key: 'section-upgrade' })
   expect((await ui.find({ type: 'Text', text: /al día/ }))?.text).toBe('Todo al día · 4 librerías revisadas')
   await ui.unmount()
 
@@ -310,7 +314,9 @@ test('a scan an earlier version stored is declined', async ($, on) => {
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-  expect((await ui.find({ type: 'Text', text: /Buscando/ }))?.text).toBe('Buscando actualizaciones…')
+  // Declined, it reads as no scan yet: folded, with no count.
+  expect((await ui.find({ type: 'Button', key: 'section-upgrade' }))?.text).toBe('▸ Actualizaciones')
+  expect(await ui.find({ type: 'Text', text: /al día|para actualizar/ })).toBeUndefined()
   await ui.unmount()
 })
 

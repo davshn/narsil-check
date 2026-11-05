@@ -113,7 +113,7 @@ El número de vulnerabilidades es el de avisos, no el de paquetes: `npm audit` c
 Arriba de todo, antes de Actualizaciones, el panel muestra lo que enseña la barra de sesión de la app de escritorio, para poder ocultar esa barra:
 
 - **▸ Entorno:** al desplegarlo, el repositorio del proyecto (la dirección web del remoto `origin`, que se abre en el navegador con un clic), la carpeta de trabajo (un clic abre el selector de carpetas y mueve la sesión a la que elijas), la rama de git (un clic abre una pestaña de terminal en la carpeta de trabajo) y el interruptor del **control remoto** (`●━━ desactivado` / `━━● activado`).
-- **▸ Conectores · 6:** al desplegarlo, los servidores MCP de la sesión, primero los conectados con cuántas herramientas tiene cada uno y después los demás con su estado (`Gmail · needs_auth`). Un clic en cualquiera abre `/mcp`, el menú de todos los servidores MCP.
+- **▸ Conectores · 6:** al desplegarlo, los servidores MCP de la sesión, primero los conectados con cuántas herramientas tiene cada uno y después los demás con su estado (`Gmail · needs_auth`).
 
 Entorno, conectores y control remoto se leen de los servidores MCP propios de la app de escritorio (`ccd_connectors` y `ccd_session_mgmt`), así que solo funcionan dentro de ella; en la terminal la sección dice por qué no pudo leerlos. Cada desplegable vuelve a leer la sesión al abrirse.
 
@@ -129,7 +129,7 @@ El panel se abre al empezar cada sesión, aunque no haya nada que actualizar, po
 
 ## El panel
 
-El panel usa los colores y la forma de Narsil: arriba, **● Narsil Check**; debajo, cada revisión como una sección que se pliega y despliega con su cabecera (`▾ Actualizaciones · 3` / `▸ Actualizaciones · 3`). El punto de color de la sección dice lo más urgente que tiene: rojo si hay algo bloqueado, amarillo si hay versiones mayores, verde si solo quedan triviales o todo está al día, y azul para Expo. La sección se queda plegada o desplegada como la dejaste, también en las siguientes sesiones.
+El panel usa los colores y la forma de Narsil: arriba, **● Narsil Check**; debajo, cada revisión como una sección que se pliega y despliega con su cabecera (`▾ Actualizaciones · 3` / `▸ Actualizaciones · 3`). El punto de color de la sección dice lo más urgente que tiene: rojo si hay algo bloqueado, amarillo si hay versiones mayores, verde si solo quedan triviales o todo está al día, y azul para Expo. Cada sesión empieza igual: **Entorno** desplegado, **Conectores** plegado, y **Actualizaciones** y **Vulnerabilidades** plegadas hasta que encuentran algo, momento en que se despliegan solas.
 
 ## Instalación
 
