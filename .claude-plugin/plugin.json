@@ -5,6 +5,7 @@
   "author": {
     "name": "Davshn"
   },
+  "license": "GPL-3.0-or-later",
   "repository": "https://github.com/davshn/narsil-check",
   "types": "./types/index.d.ts"
 }
