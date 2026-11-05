@@ -37,11 +37,14 @@ import {
   TERMINAL_SERVER,
   TERMINAL_TOOL,
   pathOf,
+  repositoryLabel,
+  switchGlyph,
+  webUrlOf,
   REMOTE_TOOL,
-  REMOTE_WORD,
   SESSIONS_SERVER,
   SESSION_TOOL,
   connected,
+  connectorLine,
   connectorsColor,
   connectorsLabel,
   envLabel,
@@ -49,9 +52,7 @@ import {
   parseConnectors,
   parseRemote,
   parseSession,
-  remoteColor,
   textOf,
-  toolsLabel,
 } from './session'
 import type { Remote, SessionView } from '../types'
 import { COMMAND, COMMAND_HELP, GROUPS, PALETTE, PANE, TITLE, agoLabel, auditSummary, commandHelp, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, reasonLine, sortUpgrades, summaryOf, tail } from './words'
@@ -74,7 +75,7 @@ const OSV_MS = 30_000
 const isUpgradeOpen = atom({ plugin: 'narsil-check', key: 'isUpgradeOpen' } as const, true, { shape: 'open-1' })
 const OPEN_KEY = 'section:upgrade:open'
 // The session section: what the app's session bar shows, and its two folds.
-const session = atom({ plugin: 'narsil-check', key: 'session' } as const, NO_SESSION, { shape: 'session-1' })
+const session = atom({ plugin: 'narsil-check', key: 'session' } as const, NO_SESSION, { shape: 'session-2' })
 const isEnvOpen = atom({ plugin: 'narsil-check', key: 'isEnvOpen' } as const, false, { shape: 'open-1' })
 const ENV_OPEN_KEY = 'section:env:open'
 const isConnectorsOpen = atom({ plugin: 'narsil-check', key: 'isConnectorsOpen' } as const, false, { shape: 'open-1' })
@@ -730,6 +731,10 @@ async function loadSession($: EngineInterface): Promise<void> {
     .run(['git', 'branch', '--show-current'], { timeoutMs: SESSION_MS })
     .then(r => (r.exitCode === 0 ? r.stdout.trim() : ''))
     .catch(() => '')
+  const repository = await $.process
+    .run(['git', 'remote', 'get-url', 'origin'], { timeoutMs: SESSION_MS })
+    .then(r => (r.exitCode === 0 ? (webUrlOf(r.stdout) ?? '') : ''))
+    .catch(() => '')
 
   let connectors: Pick<SessionView, 'connectors' | 'connectorsError'>
   try {
@@ -740,16 +745,16 @@ async function loadSession($: EngineInterface): Promise<void> {
     connectors = { connectors: [], connectorsError: errorText(err) }
   }
 
-  let where: Pick<SessionView, 'environment' | 'remote' | 'worktree' | 'remoteError'>
+  let where: Pick<SessionView, 'remote' | 'worktree' | 'remoteError'>
   try {
     const result = await $.mcp.call(SESSIONS_SERVER, SESSION_TOOL, { session_id: 'self' })
     const read = result.isError ? undefined : parseSession(result.structuredContent ?? jsonOf(result.content))
-    where = read ?? { environment: '', remote: 'unknown', remoteError: textOf(result.content) || 'respuesta sin sesión' }
+    where = read ?? { remote: 'unknown', remoteError: textOf(result.content) || 'respuesta sin sesión' }
   } catch (err) {
-    where = { environment: '', remote: 'unknown', remoteError: errorText(err) }
+    where = { remote: 'unknown', remoteError: errorText(err) }
   }
 
-  await setSession($, view => ({ isLoaded: true, cwd, branch, ...connectors, ...where, isSwitching: view.isSwitching }))
+  await setSession($, view => ({ isLoaded: true, repository, cwd, branch, ...connectors, ...where, isSwitching: view.isSwitching }))
 }
 
 // Turns Remote Control on or off for this session, as the session bar's
@@ -900,6 +905,11 @@ export const register: Register = on => {
     }
     const up = connected(view)
     const down = view.connectors.filter(c => c.status !== 'connected')
+    const knob = switchGlyph(view)
+    // A connector's click opens /mcp, the menu of every MCP server.
+    const openMcp = () => {
+      void $.command.run({ command: 'mcp' }).catch(err => $.ui.toast(`No pude abrir los servidores MCP: ${errorText(err)}`))
+    }
     const sessionSection = (
       <Box flexDirection="column">
         <Box flexDirection="row" gap={1} marginTop={1}>
@@ -914,10 +924,10 @@ export const register: Register = on => {
               <Text dimColor>Leyendo la sesión…</Text>
             ) : (
               <Box flexDirection="column">
-                <Text>
-                  <Text dimColor>Entorno </Text>
-                  {view.environment || '—'}
-                </Text>
+                <Box flexDirection="row" gap={1}>
+                  <Text dimColor>Repositorio</Text>
+                  {view.repository ? <Link href={view.repository} label={repositoryLabel(view.repository)} /> : <Text dimColor>sin repositorio remoto</Text>}
+                </Box>
                 <Box flexDirection="row" gap={1}>
                   <Text dimColor>Carpeta</Text>
                   <Button key="env-folder" plain label={view.cwd || 'elegir carpeta'} onPress={() => changeFolder($)} />
@@ -931,6 +941,18 @@ export const register: Register = on => {
                     worktree {view.worktree}
                   </Text>
                 )}
+                <Box flexDirection="row" gap={1}>
+                  <Text dimColor>Control remoto</Text>
+                  <Text bold color={knob.color}>
+                    {knob.knob}
+                  </Text>
+                  {!view.isSwitching && (view.remote === 'on' || view.remote === 'off' || view.remote === 'connecting') ? (
+                    <Button key="remote-switch" plain label={knob.word} onPress={() => switchRemote($, view.remote === 'off')} />
+                  ) : (
+                    <Text dimColor>{knob.word}</Text>
+                  )}
+                </Box>
+                {view.remoteError && <Text color={PALETTE.error}>No pude leer o cambiar el control remoto: {view.remoteError}</Text>}
               </Box>
             )}
           </Box>
@@ -951,32 +973,16 @@ export const register: Register = on => {
               <Text dimColor>No hay conectores conectados.</Text>
             ) : (
               <Box flexDirection="column">
-                {up.map(c => (
-                  <Text>
-                    <Text color={PALETTE.done}>● </Text>
-                    {c.name}
-                    {c.tools !== undefined ? <Text dimColor> · {toolsLabel(c.tools)}</Text> : ''}
-                  </Text>
+                {[...up, ...down].map(c => (
+                  <Box flexDirection="row" gap={1}>
+                    <Text color={c.status === 'connected' ? PALETTE.done : PALETTE.waiting}>●</Text>
+                    <Button key={`connector-${c.name}`} plain label={connectorLine(c)} onPress={openMcp} />
+                  </Box>
                 ))}
-                {down.length > 0 && <Text dimColor>{down.map(c => `${c.name} (${c.status})`).join(' · ')}</Text>}
               </Box>
             )}
           </Box>
         )}
-        <Box flexDirection="row" gap={1} marginTop={1}>
-          <Text bold color={remoteColor(view)}>
-            ●
-          </Text>
-          <Text>
-            Control remoto <Text dimColor>· {view.isSwitching ? 'cambiando…' : REMOTE_WORD[view.remote]}</Text>
-          </Text>
-          {!view.isSwitching && (view.remote === 'on' || view.remote === 'off' || view.remote === 'connecting') && (
-            <Button key="remote-switch" plain onPress={() => switchRemote($, view.remote === 'off')}>
-              {view.remote === 'off' ? 'Activar' : 'Desactivar'}
-            </Button>
-          )}
-        </Box>
-        {view.remoteError && <Text color={PALETTE.error}>No pude leer o cambiar el control remoto: {view.remoteError}</Text>}
       </Box>
     )
 

@@ -112,9 +112,8 @@ El número de vulnerabilidades es el de avisos, no el de paquetes: `npm audit` c
 
 Arriba de todo, antes de Actualizaciones, el panel muestra lo que enseña la barra de sesión de la app de escritorio, para poder ocultar esa barra:
 
-- **▸ Entorno:** al desplegarlo, el entorno (Local o Nube), la carpeta de trabajo y la rama de git. Un clic en la carpeta abre el selector de carpetas y mueve la sesión a la que elijas; un clic en la rama abre una pestaña de terminal en la carpeta de trabajo.
-- **▸ Conectores · 6:** al desplegarlo, los conectores conectados y cuántas herramientas tiene cada uno; los que no están conectados aparecen debajo con su estado (`Gmail (needs_auth)`).
-- **Control remoto:** su estado y un botón **Activar** / **Desactivar**.
+- **▸ Entorno:** al desplegarlo, el repositorio del proyecto (la dirección web del remoto `origin`, que se abre en el navegador con un clic), la carpeta de trabajo (un clic abre el selector de carpetas y mueve la sesión a la que elijas), la rama de git (un clic abre una pestaña de terminal en la carpeta de trabajo) y el interruptor del **control remoto** (`●━━ desactivado` / `━━● activado`).
+- **▸ Conectores · 6:** al desplegarlo, los servidores MCP de la sesión, primero los conectados con cuántas herramientas tiene cada uno y después los demás con su estado (`Gmail · needs_auth`). Un clic en cualquiera abre `/mcp`, el menú de todos los servidores MCP.
 
 Entorno, conectores y control remoto se leen de los servidores MCP propios de la app de escritorio (`ccd_connectors` y `ccd_session_mgmt`), así que solo funcionan dentro de ella; en la terminal la sección dice por qué no pudo leerlos. Cada desplegable vuelve a leer la sesión al abrirse.
 

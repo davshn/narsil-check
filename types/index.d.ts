@@ -87,14 +87,14 @@ export type Audit =
   | { status: 'done'; findings: Finding[]; checked: number; at: number }
 
 // What the desktop app's session bar shows, read from its own MCP servers:
-// where the session runs, its folder and branch, its connectors and whether
-// Remote Control is on. `connectorsError` and `remoteError` say why a read
-// or a switch failed.
+// the project's repository (its web address, from git's origin), its folder
+// and branch, its connectors and whether Remote Control is on.
+// `connectorsError` and `remoteError` say why a read or a switch failed.
 export type Connector = { name: string; status: string; tools?: number }
 export type Remote = 'on' | 'off' | 'connecting' | 'unavailable' | 'unknown'
 export type SessionView = {
   isLoaded: boolean
-  environment: string
+  repository: string
   cwd: string
   branch: string
   worktree?: string

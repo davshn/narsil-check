@@ -22,7 +22,7 @@ export const TERMINAL_TOOL = 'open_terminal_tab'
 
 export const NO_SESSION: SessionView = {
   isLoaded: false,
-  environment: '',
+  repository: '',
   cwd: '',
   branch: '',
   connectors: [],
@@ -69,14 +69,14 @@ export function parseConnectors(value: unknown): Connector[] | undefined {
     }))
 }
 
-// Where the session runs and whether Remote Control is on, from get_session.
-export function parseSession(value: unknown): { environment: string; remote: Remote; worktree?: string } | undefined {
+// Whether Remote Control is on, and the session's worktree, from get_session.
+export function parseSession(value: unknown): { remote: Remote; worktree?: string } | undefined {
   if (typeof value !== 'object' || value === null) return undefined
   const v = value as Record<string, unknown>
   const state = v.remoteControlState
   const remote: Remote = REMOTES.includes(state as Remote) ? (state as Remote) : v.remoteControlActive === true ? 'on' : 'unknown'
   const worktree = typeof v.worktreePath === 'string' ? v.worktreePath : undefined
-  return { environment: v.isRemote === true ? 'Nube' : 'Local', remote, ...(worktree ? { worktree } : {}) }
+  return { remote, ...(worktree ? { worktree } : {}) }
 }
 
 // The state set_remote_control answers, as JSON or as words.
@@ -94,6 +94,32 @@ export function connected(view: SessionView): Connector[] {
 
 export function envLabel(isOpen: boolean): string {
   return `${isOpen ? '▾' : '▸'} Entorno`
+}
+
+// The web page of a git remote: SSH (`git@host:owner/repo.git`,
+// `ssh://git@host:22/owner/repo`) and HTTPS (with or without a user or
+// `.git`) alike. Undefined for anything else, a local path among them.
+export function webUrlOf(remote: string): string | undefined {
+  const url = remote.trim()
+  const scp = /^[\w.-]+@([\w.-]+):(?!\/)(.+?)(?:\.git)?\/?$/.exec(url)
+  if (scp) return `https://${scp[1]}/${scp[2]}`
+  const full = /^(?:ssh|git|https?):\/\/(?:[^@/]+@)?([\w.-]+)(?::\d+)?\/(.+?)(?:\.git)?\/?$/.exec(url)
+  if (full) return `https://${full[1]}/${full[2]}`
+  return undefined
+}
+
+// How the repository is shown: its address without the scheme.
+export function repositoryLabel(url: string): string {
+  return url.replace(/^https?:\/\//, '')
+}
+
+// The Remote Control switch, drawn: the knob left and gray when off, right
+// and green when on; yellow while it changes or connects.
+export function switchGlyph(view: SessionView): { knob: string; color: string; word: string } {
+  if (view.isSwitching) return { knob: '━●━', color: PALETTE.waiting, word: 'cambiando…' }
+  if (view.remote === 'on') return { knob: '━━●', color: PALETTE.done, word: REMOTE_WORD.on }
+  if (view.remote === 'connecting') return { knob: '━●━', color: PALETTE.waiting, word: REMOTE_WORD.connecting }
+  return { knob: '●━━', color: PALETTE.muted, word: REMOTE_WORD[view.remote] }
 }
 
 // The folder a directory tool answered with: a `path` field, else the first
@@ -130,12 +156,10 @@ export const REMOTE_WORD: Record<Remote, string> = {
   unknown: 'sin leer',
 }
 
-export function remoteColor(view: SessionView): string {
-  if (view.remoteError) return PALETTE.error
-  if (view.remote === 'on') return PALETTE.done
-  if (view.remote === 'connecting' || view.isSwitching) return PALETTE.waiting
-  if (view.remote === 'unavailable') return PALETTE.error
-  return PALETTE.muted
+// A connector's row: its name, then its tools when connected, else its state.
+export function connectorLine(c: Connector): string {
+  if (c.status !== 'connected') return `${c.name} · ${c.status}`
+  return c.tools === undefined ? c.name : `${c.name} · ${toolsLabel(c.tools)}`
 }
 
 // The tools a connector has, in words.
