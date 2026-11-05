@@ -731,7 +731,10 @@ const errorText = (err: unknown) => (err instanceof Error ? err.message : String
 // Reads what the session bar shows: the folder and branch from the engine and
 // git, the rest from the desktop app's own servers. A part that cannot be read
 // keeps its reason, so the section says why instead of staying empty.
-async function loadSession($: EngineInterface): Promise<void> {
+// `isFinal: false` writes only a full read, so a failed one leaves the
+// section reading instead of showing an error that a retry may clear.
+// Resolves whether the app's servers answered.
+async function loadSession($: EngineInterface, isFinal = true): Promise<boolean> {
   const cwd = await $.session.cwd().catch(() => '')
   const branch = await $.process
     .run(['git', 'branch', '--show-current'], { timeoutMs: SESSION_MS })
@@ -760,7 +763,22 @@ async function loadSession($: EngineInterface): Promise<void> {
     where = { remote: 'unknown', remoteError: errorText(err) }
   }
 
-  await setSession($, view => ({ isLoaded: true, repository, cwd, branch, ...connectors, ...where, isSwitching: view.isSwitching }))
+  const isRead = !connectors.connectorsError && !where.remoteError
+  if (isRead || isFinal) await setSession($, view => ({ isLoaded: true, repository, cwd, branch, ...connectors, ...where, isSwitching: view.isSwitching }))
+  return isRead
+}
+
+// The app's servers may connect after the session starts: the first read is
+// retried, waiting longer each time, about a minute in all; the last try
+// shows what failed.
+const SESSION_RETRIES_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000]
+
+async function loadSessionAtStart($: EngineInterface): Promise<void> {
+  for (const wait of SESSION_RETRIES_MS) {
+    if (await loadSession($, false)) return
+    await $.clock.sleep(wait)
+  }
+  await loadSession($)
 }
 
 // Turns Remote Control on or off for this session, as the session bar's
@@ -827,11 +845,19 @@ export const register: Register = on => {
     await update($, isConnectorsOpen, () => false)
     await update($, isUpgradeOpen, () => false)
     await update($, isVulnsOpen, () => false)
-    void loadSession($).catch(() => undefined)
+    void loadSessionAtStart($).catch(() => undefined)
     // Opens on every session: it stands in for the app's session bar.
     await $.ui.open({ id: PANE, title: TITLE }).catch(() => undefined)
     if ((await detected($)).length > 0) void runScan($).catch(() => undefined)
     return next(e)
+  })
+
+  // Each main turn may switch the branch, the folder or Remote Control: the
+  // session is read again as it ends, without holding the turn up.
+  on('turn.complete', async ($, e, next) => {
+    const result = await next(e)
+    if (e.agentId === undefined) void loadSession($).catch(() => undefined)
+    return result
   })
 
   // /narsil-check <check>, as /narsil <option>: each check by name, and the

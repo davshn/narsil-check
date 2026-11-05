@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
@@ -25,13 +25,11 @@ const CONNECTORS = {
 }
 
 // A project with no manifests, and the desktop app's servers standing in.
-function app(on: On, remote: { state: string }, isUnreachable = false) {
+// `failures`: how many calls to the app's servers fail before they answer.
+// `git`: what git answers, which a test may change between reads.
+function app(on: On, remote: { state: string }, failures = 0, git: Record<string, string> = {}) {
+  let failed = 0
   const calls: { server: string; tool: string; args: Record<string, unknown> }[] = []
-  const commands: string[] = []
-  on('command.run', (_, e) => {
-    commands.push(e.command)
-    return { text: '' }
-  })
   on('fs.exists', () => ({ value: false }))
   on('store.get', () => ({ value: undefined }))
   on('store.set', () => ({ value: undefined }))
@@ -40,14 +38,17 @@ function app(on: On, remote: { state: string }, isUnreachable = false) {
   on('ui.toast', () => ({ value: undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: 'E:\\Proyectos\\app' }))
-  const GIT: Record<string, string> = { 'git branch --show-current': 'feat/login\n', 'git remote get-url origin': 'git@github.com:davshn/narsil-check.git\n' }
+  const GIT = Object.assign(git, { 'git branch --show-current': 'feat/login\n', 'git remote get-url origin': 'git@github.com:davshn/narsil-check.git\n' })
   on('process.run', (_, e) => {
     const out = GIT[e.argv.join(' ')]
     return { value: { exitCode: out === undefined ? 1 : 0, stdout: out ?? '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('mcp.call', (_, e) => {
     calls.push(e)
-    if (isUnreachable) throw new Error('server not connected')
+    if (failed < failures) {
+      failed++
+      throw new Error('server not connected')
+    }
     if (e.server === 'ccd_connectors') return text(CONNECTORS)
     if (e.tool === 'request_directory') return text({ path: 'E:\\Proyectos\\otro' })
     if (e.tool === 'change_directory') return text('Moved')
@@ -56,7 +57,7 @@ function app(on: On, remote: { state: string }, isUnreachable = false) {
     remote.state = e.args.enabled ? 'on' : 'off'
     return text({ state: remote.state })
   })
-  return { calls, commands }
+  return { calls }
 }
 
 async function settled($: Engine, pattern: RegExp) {
@@ -184,13 +185,56 @@ test('the folder picks a new working folder and moves there; the branch opens a 
   await ui.unmount()
 })
 
-test('a server the mod cannot reach says why instead of staying empty', async ($, on) => {
-  app(on, { state: 'off' }, true)
+test('servers that connect after the session starts are read once they answer, with no click', async ($, on) => {
+  const clock = mock.clock(on)
+  // Two reads fail (two calls each) before the app's servers answer.
+  app(on, { state: 'off' }, 4)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  await settled($, /Entorno/)
-  for (let i = 0; i < 50; i++) await new Promise<void>(resolve => setTimeout(() => resolve(), 5))
+  await clock.settle()
+
+  // While it retries the section reads, it shows no error.
+  let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /Leyendo/ }))?.text).toBe('Leyendo la sesión…')
+  expect((await ui.find({ type: 'Button', key: 'section-connectors' }))?.text).toBe('▸ Conectores')
+  await ui.unmount()
+
+  await clock.advance(1_000)
+  await clock.advance(2_000)
+  await settled($, /Conectores · 2/)
+  ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Button', key: 'env-branch' }))?.text).toBe('feat/login')
+  expect((await ui.find({ type: 'Text', text: /No pude/ }))).toBeUndefined()
+  await ui.unmount()
+})
+
+test('the session is read again as each main turn ends: a branch switched in the turn shows', async ($, on) => {
+  const git: Record<string, string> = {}
+  app(on, { state: 'off' }, 0, git)
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await settled($, /Conectores · 2/)
+
+  git['git branch --show-current'] = 'main\n'
+  await $.turn.complete({ turnId: 't1', reason: 'answer', answer: '', durationMs: 1, isAborted: false })
+  await settled($, /^main$/)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Button', key: 'env-branch' }))?.text).toBe('main')
+  await ui.unmount()
+})
+
+test('a server the mod cannot reach says why once the retries run out', async ($, on) => {
+  const clock = mock.clock(on)
+  app(on, { state: 'off' }, Number.POSITIVE_INFINITY)
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  for (const wait of [1_000, 2_000, 4_000, 8_000, 15_000, 30_000]) {
+    await clock.settle()
+    await clock.advance(wait)
+  }
+  await clock.settle()
+  for (let i = 0; i < 20; i++) await new Promise<void>(resolve => setTimeout(() => resolve(), 5))
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /control remoto:/ }))?.text).toMatch(/^No pude leer o cambiar el control remoto: .+/)
   await ui.press({ key: 'section-connectors' })
   // A failed call reaches the plugin as an error; its words are the engine's.
   expect((await ui.find({ type: 'Text', text: /conectores:/ }))?.text).toMatch(/^No pude leer los conectores: .+/)
