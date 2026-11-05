@@ -14,9 +14,9 @@ Branch: `feat/ecosystems-wave-4` · Delivery: `ask-on-risk` · Tests: `claude pl
 
 | ID | Specs | Route | Status | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | S2 | inline | pending | |
-| T2 | S1 | inline | pending | |
-| T3 | S2, docs, version | inline | pending | |
+| T1 | S2 | inline | done | 8444155 |
+| T2 | S1 | inline | done | 83c0029 |
+| T3 | S2, docs, version | inline | done | the closing commit |
 
 T1: an adapter can name a command that answers its latest version (`latestCommand`) and the repository a name stands for (`repoUrlFor`). T2: the SwiftPM adapter for Package.swift, project.pbxproj and Package.resolved (v1, v2, v3). T3: README, version 0.11.0, reinstall.
 
@@ -26,3 +26,4 @@ Route evidence: T2 depends on T1 and is about 200 lines, so no writer reason app
 
 - **L1** (2026-11-04) User: "dale a la oleada 4".
 - **L2** Probes: `git ls-remote --tags --refs https://github.com/apple/swift-argument-parser` lists `refs/tags/1.8.2` and earlier with no API limit; Alamofire's tags end at 5.12.2; vapor's Package.swift writes `.package(url: ..., from: "2.101.3")`, prerelease minimums (`from: "5.0.0-beta"`) and `traits:` arguments. No swift toolchain here (Windows), so the install command cannot run for real.
+- **L3** T1-T3 done; 93 tests across 10 files, tsc and validate clean at each commit. Real check: vapor's live Package.swift gives 26 packages and a real git ls-remote answers every one with no API limit (swift-nio 2.101.3 -> 2.105.0, swift-syntax 602 -> 604 a major; a beta minimum like console-kit 5.0.0-beta stays above the latest plain tag 4.16.2, so it is not offered). That run showed the import guess got capitals wrong (swift-nio is imported as NIO), so the import pattern now ignores case letter by letter. Not checked: swift package update and xcodebuild never ran (no toolchain on Windows).

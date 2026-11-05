@@ -595,7 +595,7 @@ export const register: Register = on => {
       return (
         <Box flexDirection="column">
           <Text>No encontré dependencias que revisar en este proyecto.</Text>
-          <Text dimColor>Reviso npm y Expo (package.json), PyPI (pyproject.toml, requirements.txt), Go (go.mod), Cargo (Cargo.toml), Pub (pubspec.yaml), Gradle y Maven (libs.versions.toml, build.gradle.kts, pom.xml), NuGet (.csproj) y RubyGems (Gemfile).</Text>
+          <Text dimColor>Reviso npm y Expo (package.json), PyPI (pyproject.toml, requirements.txt), Go (go.mod), Cargo (Cargo.toml), Pub (pubspec.yaml), Gradle y Maven (libs.versions.toml, build.gradle.kts, pom.xml), NuGet (.csproj), RubyGems (Gemfile) y SwiftPM (Package.swift, proyectos de Xcode).</Text>
         </Box>
       )
     }

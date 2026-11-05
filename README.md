@@ -1,6 +1,6 @@
 # upgrade-mod
 
-Un mod de Claude Code que, al abrir un proyecto con librerías desactualizadas, muestra en un panel qué se puede actualizar y cuánto cuesta hacerlo. Lee proyectos de JavaScript y TypeScript (npm y Expo), Python (PyPI), Go, Rust (Cargo), Dart o Flutter (Pub), Kotlin y Java (Gradle y Maven), C# (NuGet) y Ruby (RubyGems).
+Un mod de Claude Code que, al abrir un proyecto con librerías desactualizadas, muestra en un panel qué se puede actualizar y cuánto cuesta hacerlo. Lee proyectos de JavaScript y TypeScript (npm y Expo), Python (PyPI), Go, Rust (Cargo), Dart o Flutter (Pub), Kotlin y Java (Gradle y Maven), C# (NuGet), Ruby (RubyGems) y Swift (SwiftPM).
 
 ## Qué muestra
 
@@ -66,6 +66,7 @@ En los dos casos, el commit lleva solo los manifests y lockfiles de los ecosiste
 | **Maven** (Kotlin, Java) | `gradle/libs.versions.toml`, cada `build.gradle(.kts)` y `pom.xml` del árbol | la versión escrita | Google Maven, Gradle Plugin Portal o Maven Central | reescribe la versión donde está escrita; Gradle y Maven la descargan en el siguiente build |
 | **NuGet** (C#, F#, VB) | cada `.csproj`, `.fsproj` y `.vbproj` del árbol, `Directory.Packages.props` | la versión escrita | api.nuget.org | reescribe el `Version` y luego `dotnet restore` |
 | **RubyGems** (Ruby) | `Gemfile` | `Gemfile.lock` | rubygems.org | reescribe el requisito y luego `bundle update --conservative` |
+| **SwiftPM** (Swift) | `Package.swift`, el `project.pbxproj` de cada proyecto de Xcode | `Package.resolved` (v1, v2 y v3), también el del workspace de Xcode | los tags de git de cada paquete (`git ls-remote`) | reescribe la versión mínima y luego `swift package update`, o `xcodebuild -resolvePackageDependencies` en una app de Xcode |
 
 Algunos detalles:
 
@@ -75,6 +76,7 @@ Algunos detalles:
 - **Maven**: se leen las `<dependency>` y los `<plugin>` con versión propia o una `${propiedad}` de `<properties>`. Una versión que gestiona un POM padre o un BOM queda fuera.
 - **NuGet**: los manifests se buscan en todo el árbol (`src/Api/Api.csproj`). Un analizador (`PrivateAssets="all"`) cuenta como dependencia de desarrollo. Una versión con una propiedad de MSBuild (`$(X)`) o un rango (`[1.0,2.0)`) queda fuera.
 - **RubyGems**: los grupos `:development` y `:test` cuentan como desarrollo, también dentro de un bloque `platforms`. Una gema sin requisito no se reescribe: la sube Bundler. Las versiones de cuatro partes (`8.1.4.1`) se comparan completas.
+- **SwiftPM**: no hay registro central; un paquete es su URL de git. La última versión sale de `git ls-remote --tags` sobre el propio repositorio, sin pasar por la API de GitHub, así que no hay límite de consultas y sirve con cualquier host. Cuentan solo los tags de una versión final (sin `-beta`). Se leen todas las formas de requisito (`from:`, `.upToNextMajor`, `.upToNextMinor`, `exact:` y rangos `"1.0.0"..<"2.0.0"`); los de `branch:`, `revision:` o `path:` quedan fuera. Para buscar los imports se usa el nombre del repositorio sin `swift-` y sin distinguir mayúsculas (`swift-nio-ssl` encuentra `import NIOSSL`).
 - **Expo, peerDependencies y versiones fijadas** se revisan solo en npm.
 - Las dependencias de ruta, de git o del workspace no se revisan, porque no vienen de un registro.
 
