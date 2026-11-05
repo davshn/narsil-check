@@ -28,21 +28,32 @@ export function lockVersion(text: string): string {
   return text.replace(/-(x86|x64|arm|aarch|java|universal|mingw|mswin|darwin|linux|musl)\S*$/, '')
 }
 
-export function parseGemfile(files: Files): Dep[] {
-  const text = files[MANIFEST]
-  if (text === undefined) return []
+// Every gem Gemfile.lock installs from rubygems.org: the specs of its GEM
+// section (a GIT or PATH section's gems are not rubygems.org's).
+export function lockedGems(lock: string): Map<string, string> {
   const locked = new Map<string, string>()
+  let section = ''
   let inSpecs = false
-  for (const line of (files[LOCK] ?? '').split(/\r?\n/)) {
-    if (/^\S/.test(line)) inSpecs = false
+  for (const line of lock.split(/\r?\n/)) {
+    if (/^\S/.test(line)) {
+      section = line.trim()
+      inSpecs = false
+    }
     if (/^ {2}specs:\s*$/.test(line)) {
-      inSpecs = true
+      inSpecs = section === 'GEM'
       continue
     }
     // Four spaces: a gem; six: what that gem depends on.
     const spec = inSpecs ? /^ {4}([^\s(]+) \(([^)]+)\)\s*$/.exec(line) : null
     if (spec && !locked.has(spec[1] as string)) locked.set(spec[1] as string, lockVersion(spec[2] as string))
   }
+  return locked
+}
+
+export function parseGemfile(files: Files): Dep[] {
+  const text = files[MANIFEST]
+  if (text === undefined) return []
+  const locked = lockedGems(files[LOCK] ?? '')
   const deps: Dep[] = []
   // The groups each open `group ... do` block names, innermost last.
   const blocks: boolean[] = []
@@ -109,6 +120,7 @@ export const RUBYGEMS: Adapter = {
   // Only these gems move: --conservative keeps what they share as it is.
   installArgv: (_, upgrades) => [['bundle', 'update', '--conservative', ...upgrades.map(u => u.name)]],
   managerOf: () => 'bundler',
+  treeOf: files => [...lockedGems(files[LOCK] ?? '')].map(([name, version]) => ({ name, version })),
   importPattern: name => `require[[:space:](]+["']${escapeRegex(name)}(/[^"']*)?["']`,
   infoUrl: name => `https://rubygems.org/api/v1/gems/${encodeURIComponent(name)}.json`,
   repoUrlOf: text => {

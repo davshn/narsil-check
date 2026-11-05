@@ -70,6 +70,22 @@ export type Explained =
   | { status: 'done'; difficulty: Difficulty; text: string }
   | { status: 'failed'; text: string }
 
+// A known vulnerability, as OSV.dev records it: its id and the ids it also
+// goes by (CVE, GHSA, PYSEC), what it is, how bad, and the first version
+// past the installed one that fixes it, when there is one.
+export type Severity = 'critical' | 'high' | 'moderate' | 'low' | 'unknown'
+export type Vuln = { id: string; aliases: string[]; summary: string; severity: Severity; fixed?: string }
+
+// A package of the project with vulnerabilities: direct when the manifest
+// declares it, else one of its dependencies' (read from the lockfile).
+export type Finding = { name: string; display?: string; ecosystem: Ecosystem; version: string; isDirect: boolean; vulns: Vuln[] }
+
+export type Audit =
+  | { status: 'idle' }
+  | { status: 'scanning' }
+  | { status: 'error'; message: string }
+  | { status: 'done'; findings: Finding[]; checked: number; at: number }
+
 declare module 'claude-code' {
   interface PluginState {
     'narsil-check': {
@@ -79,6 +95,8 @@ declare module 'claude-code' {
       pr: Shaped<Pr>
       reasons: Shaped<Record<string, Explained>>
       isUpgradeOpen: Shaped<boolean>
+      audit: Shaped<Audit>
+      isVulnsOpen: Shaped<boolean>
     }
   }
 }

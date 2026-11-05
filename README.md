@@ -95,14 +95,28 @@ Algunos detalles:
 - **Expo, peerDependencies y versiones fijadas** se revisan solo en npm.
 - Las dependencias de ruta, de git o del workspace no se revisan, porque no vienen de un registro.
 
+## Vulnerabilidades
+
+La sección **Vulnerabilidades**, debajo de Actualizaciones, lista las vulnerabilidades conocidas de los paquetes del proyecto según [OSV.dev](https://osv.dev), la base abierta que reúne los avisos de GitHub (los mismos de `npm audit`), PyPI, Go, crates.io, RubyGems y el resto. Una sola consulta sirve para los nueve ecosistemas, sin instalar `pnpm audit`, `pip-audit`, `cargo-audit` ni `govulncheck`.
+
+- **Qué se revisa:** todo el árbol instalado donde hay un lockfile que lo dice (`package-lock.json`, `Cargo.lock`, `uv.lock` o `poetry.lock`, `Gemfile.lock`, `pubspec.lock`, `Package.resolved` y los `require` de `go.mod`, también los indirectos); en Maven y NuGet, las dependencias declaradas. Un paquete que no declaras tú lleva la marca *indirecta*.
+- **Gravedad:** la del propio aviso (Crítica, Alta, Moderada, Baja) y, si no la trae, la que da la nota de su vector CVSS v3. Sin ninguna de las dos, *Sin clasificar*. Un mismo problema con dos identificadores (GHSA y PYSEC) cuenta una vez.
+- **Cada aviso** muestra el paquete y su versión, su identificador, el resumen y la primera versión que lo corrige.
+- **Copiar:** cada grupo de gravedad tiene su botón **Copiar**, que pone en el portapapeles los avisos de ese nivel con el arreglo y el enlace a OSV.
+- **Con Actualizaciones:** si la actualización que ofrece el panel corrige vulnerabilidades, la fila lo dice en rojo (`lodash 4.17.20 → 4.17.21 · corrige 2 vulnerabilidades`) y sube al principio de su grupo.
+- **Cuándo:** después de cada revisión de actualizaciones (al abrir la sesión, con el botón o el comando), con su propio botón **Consultar de nuevo**, y con `/narsil-check vulns`. Los detalles de cada aviso se guardan y solo se piden de nuevo cuando OSV dice que cambiaron.
+
+El número de vulnerabilidades es el de avisos, no el de paquetes: `npm audit` cuenta además los paquetes que solo dependen de uno vulnerable, que aquí no se repiten.
+
 ## Comandos
 
 Como `/narsil <opción>` en Narsil, cada revisión es un argumento de `/narsil-check`:
 
 - `/narsil-check upgrade`: abre el panel con la sección **Actualizaciones** desplegada y vuelve a revisar. Es la forma de abrirlo de nuevo si lo cierras.
+- `/narsil-check vulns`: abre el panel con la sección **Vulnerabilidades** desplegada y vuelve a consultar OSV.dev.
 - `/narsil-check` sin argumento, o con uno que no conoce, responde con la lista de revisiones.
 
-El panel se abre solo al empezar una sesión cuando hay librerías para actualizar. Si todo está al día, no se abre: usa `/narsil-check upgrade`.
+El panel se abre solo al empezar una sesión cuando hay librerías para actualizar o vulnerabilidades. Si no hay nada, no se abre: usa `/narsil-check upgrade` o `/narsil-check vulns`.
 
 ## El panel
 

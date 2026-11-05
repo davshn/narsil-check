@@ -35,6 +35,22 @@ export const NPM: Adapter = {
   installArgv: (present, upgrades) => installArgv(managerOf(present), upgrades),
   managerOf,
   importPattern: name => `(from[[:space:]]+|require\\(|import\\()['"]${escapeRegex(name)}(/[^'"]*)?['"]`,
+  // package-lock.json (v2 and v3) lists every installed package by path.
+  treeOf: files => {
+    let lock: { packages?: Record<string, { version?: unknown; name?: unknown; link?: unknown }> } | undefined
+    try {
+      lock = files['package-lock.json'] ? JSON.parse(files['package-lock.json']) : undefined
+    } catch {
+      lock = undefined
+    }
+    const tree: { name: string; version: string }[] = []
+    for (const [path, entry] of Object.entries(lock?.packages ?? {})) {
+      if (!path.includes('node_modules/') || entry.link === true || typeof entry.version !== 'string') continue
+      const name = typeof entry.name === 'string' ? entry.name : path.slice(path.lastIndexOf('node_modules/') + 'node_modules/'.length)
+      if (!tree.some(p => p.name === name && p.version === entry.version)) tree.push({ name, version: entry.version })
+    }
+    return tree
+  },
   repoUrlOf: text => {
     const field = (JSON.parse(text) as { repository?: unknown }).repository
     const url = typeof field === 'string' ? field : (field as { url?: unknown } | undefined)?.url

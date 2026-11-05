@@ -11,7 +11,7 @@ const SUM = 'go.sum'
 // The direct requirements of go.mod: `require x v1.2.3` and `require ( ... )`
 // blocks, leaving out what is only `// indirect` and what a `replace`
 // directive points elsewhere.
-export function parseGoMod(files: Files): Dep[] {
+export function parseGoMod(files: Files, withIndirect = false): Dep[] {
   const text = files[MANIFEST]
   if (text === undefined) return []
   const replaced = new Set<string>()
@@ -36,8 +36,8 @@ export function parseGoMod(files: Files): Dep[] {
       replaced.add(body.split(/\s+/)[0] as string)
       continue
     }
-    if (/\/\/\s*indirect\b/.test(body)) continue
-    const [path, version] = body.split(/\s+/)
+    if (!withIndirect && /\/\/\s*indirect\b/.test(body)) continue
+    const [path, version] = body.replace(/\s*\/\/.*$/, '').split(/\s+/)
     if (path && version) required.push({ name: path, spec: version, isDev: false, installed: version.replace(/^v/, '') })
   }
   return required.filter(d => !replaced.has(d.name))
@@ -75,6 +75,8 @@ export const GO: Adapter = {
   nextMajor: nextMajorPath,
   installArgv: (_, upgrades) => [['go', 'get', ...upgrades.map(u => `${u.name}@${u.latest.startsWith('v') ? u.latest : `v${u.latest}`}`)], ['go', 'mod', 'tidy']],
   managerOf: () => 'go',
+  // Every module go.mod requires, the indirect ones too: what the build uses.
+  treeOf: files => parseGoMod(files, true).map(d => ({ name: d.name, version: d.spec.replace(/^v/, '') })),
   // An import of the module or any package in it: "github.com/x/y/sub".
   importPattern: name => `"${escapeRegex(name)}(/[^"]*)?"`,
   repoUrlOf: text => {

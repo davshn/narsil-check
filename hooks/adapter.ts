@@ -60,6 +60,9 @@ export type Adapter = {
   // What else in the project an upgrade breaks, in words, when the
   // ecosystem knows (Kotlin and the compiler plugins built for one Kotlin).
   conflictsOf?: (upgrade: Upgrade, deps: Dep[], files: Files) => string[]
+  // Every package the lockfile installs, the dependencies' own included, for
+  // the vulnerabilities check; absent or empty, the declared ones count.
+  treeOf?: (files: Files) => { name: string; version: string }[]
 }
 
 // Words that say a version is kept on purpose: "pin", "hold", "keep",

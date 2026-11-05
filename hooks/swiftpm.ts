@@ -182,6 +182,12 @@ export const SWIFTPM: Adapter = {
       ? [['swift', 'package', 'update', ...upgrades.map(u => packageName(u.name).toLowerCase())]]
       : [['xcodebuild', '-resolvePackageDependencies']],
   managerOf: present => (present.includes(MANIFEST) ? 'swift' : 'xcode'),
+  // Every package Package.resolved pins, wherever it is.
+  treeOf: files => {
+    const pins = new Map<string, string>()
+    for (const [path, text] of Object.entries(files)) if (path.endsWith(RESOLVED)) for (const [url, v] of resolvedVersions(text)) pins.set(url, v)
+    return [...pins].map(([name, version]) => ({ name, version }))
+  },
   importPattern: name => `^[[:space:]]*(@testable[[:space:]]+)?import[[:space:]]+${anyCase(moduleOf(name))}([[:space:]]|$)`,
   repoUrlFor: name => (name.includes('github.com') ? name : undefined),
   repoUrlOf: () => undefined,

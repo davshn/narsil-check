@@ -1,7 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Explained, Group, Job, Pending, Pr, Scan, Upgrade } from '../types'
+import type { Audit, Explained, Finding, Group, Job, Pending, Pr, Scan, Severity, Upgrade } from '../types'
+import { BATCH_SIZE, OSV_BATCH, OSV_VULN, SEVERITIES, SEVERITY_TITLE, batchBody, batchIds, bySeverity, copyVulnsText, fixedBy, mergeVulns, vulnOf, worstOf } from './osv'
+import type { Package } from './osv'
 import {
   NOTES_PER_RELEASE,
   NOTES_TOTAL,
@@ -25,7 +27,7 @@ import { branchName, commitBody, commitTitle, isMainBranch, prBody, prUrlOf } fr
 import { EXPO_TABLE, LOCK, MANIFEST, expoTableUrl, installedFromManifest, installedOf, latestUrl, parseManifest, peerConflicts, pinConflicts, upgradeOf, versionUrl } from './npm'
 import type { Declared, Found, Installed } from './npm'
 import { baseOf, bumpOf, parseVersion, show } from './semver'
-import { COMMAND, COMMAND_HELP, GROUPS, PALETTE, PANE, TITLE, agoLabel, commandHelp, sectionColor, sectionLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, reasonLine, sortUpgrades, summaryOf, tail } from './words'
+import { COMMAND, COMMAND_HELP, GROUPS, PALETTE, PANE, TITLE, agoLabel, auditSummary, commandHelp, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, reasonLine, sortUpgrades, summaryOf, tail } from './words'
 
 // Change a tag when its type's fields change: it declines what an earlier
 // version stored, which outlives a reload.
@@ -35,6 +37,12 @@ const NO_PENDING: Pending = { changes: [], files: [], manager: 'npm', branch: ''
 const pending = atom({ plugin: 'narsil-check', key: 'pending' } as const, NO_PENDING, { shape: 'pending-2' })
 const pr = atom({ plugin: 'narsil-check', key: 'pr' } as const, { status: 'idle' } as Pr, { shape: 'pr-2' })
 const reasons = atom({ plugin: 'narsil-check', key: 'reasons' } as const, {} as Record<string, Explained>, { shape: 'reasons-1' })
+const audit = atom({ plugin: 'narsil-check', key: 'audit' } as const, { status: 'idle' } as Audit, { shape: 'audit-1' })
+// Whether the vulnerabilities section is open; kept in the store too.
+const isVulnsOpen = atom({ plugin: 'narsil-check', key: 'isVulnsOpen' } as const, true, { shape: 'open-1' })
+const VULNS_OPEN_KEY = 'section:vulns:open'
+const OSV_CONCURRENCY = 8
+const OSV_MS = 30_000
 // Whether the upgrade section is open; kept in the store across sessions.
 const isUpgradeOpen = atom({ plugin: 'narsil-check', key: 'isUpgradeOpen' } as const, true, { shape: 'open-1' })
 const OPEN_KEY = 'section:upgrade:open'
@@ -286,6 +294,111 @@ function runScan($: EngineInterface, isFresh = false): Promise<void> {
   return running
 }
 
+function setAudit($: EngineInterface, value: Audit): Promise<Audit> {
+  return update($, audit, () => value)
+}
+
+// What the vulnerabilities check asks about: every package each lockfile
+// installs where the adapter reads one, the declared ones elsewhere.
+async function auditedPackages($: EngineInterface): Promise<Package[]> {
+  const packages: Package[] = []
+  for (const { adapter, present } of await detected($)) {
+    const files = await readFiles($, present)
+    const declared = adapter.parse(files)
+    const direct = new Map(declared.map(d => [d.name, d]))
+    const tree = adapter.treeOf?.(files) ?? []
+    const listed =
+      tree.length > 0
+        ? tree.map(p => ({ name: p.name, version: p.version, isDirect: direct.has(p.name) }))
+        : declared.flatMap(d => {
+            const base = baseOf(d.spec)
+            const version = d.installed ?? (base ? show(base) : undefined)
+            return version ? [{ name: d.name, version, isDirect: true }] : []
+          })
+    for (const p of listed) {
+      const display = direct.get(p.name)?.display
+      packages.push({ ...p, ecosystem: adapter.id, ...(display ? { display } : {}) })
+    }
+  }
+  return packages
+}
+
+// One advisory's record, from the store while OSV says it has not changed.
+async function advisoryOf($: EngineInterface, id: string, modified: string): Promise<unknown> {
+  const key = `osv:${id}`
+  const cached = (await $.store.get(key)) as { modified: string; advisory: unknown } | undefined
+  if (cached && cached.modified === modified) return cached.advisory
+  const text = await fetchText($, `${OSV_VULN}${encodeURIComponent(id)}`, { accept: 'application/json' })
+  if (!text) return undefined
+  const advisory = JSON.parse(text) as Record<string, unknown>
+  // Only what the pane reads: the full record can hold pages of details.
+  const kept = {
+    id: advisory.id,
+    aliases: advisory.aliases,
+    summary: advisory.summary,
+    details: typeof advisory.details === 'string' ? advisory.details.split('\n')[0] : undefined,
+    database_specific: advisory.database_specific,
+    severity: advisory.severity,
+    affected: advisory.affected,
+  }
+  await $.store.set(key, { modified, advisory: kept })
+  return kept
+}
+
+let auditing: Promise<void> | undefined
+
+// One audit at a time, as one scan.
+function runAudit($: EngineInterface): Promise<void> {
+  auditing ??= auditProject($).finally(() => {
+    auditing = undefined
+  })
+  return auditing
+}
+
+async function auditProject($: EngineInterface): Promise<void> {
+  const packages = await auditedPackages($)
+  if (packages.length === 0) {
+    await setAudit($, { status: 'done', findings: [], checked: 0, at: Date.now() })
+    return
+  }
+  await setAudit($, { status: 'scanning' })
+  try {
+    const ids: { id: string; modified: string }[][] = []
+    for (let i = 0; i < packages.length; i += BATCH_SIZE) {
+      const res = await $.http.fetch(OSV_BATCH, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: batchBody(packages.slice(i, i + BATCH_SIZE)) })
+      if (!res.ok) throw new Error(`OSV respondió ${res.status}`)
+      ids.push(...batchIds(res.text))
+    }
+    const findings: Finding[] = []
+    await pool(
+      packages.map((p, i) => ({ p, list: ids[i] ?? [] })).filter(x => x.list.length > 0),
+      OSV_CONCURRENCY,
+      async ({ p, list }) => {
+        const vulns = []
+        for (const { id, modified } of list) {
+          const advisory = await advisoryOf($, id, modified)
+          if (advisory) vulns.push(vulnOf(advisory as never, p))
+        }
+        const merged = mergeVulns(vulns)
+        if (merged.length > 0) findings.push({ name: p.name, ecosystem: p.ecosystem, version: p.version, isDirect: p.isDirect, vulns: merged, ...(p.display ? { display: p.display } : {}) })
+      },
+    )
+    findings.sort((a, b) => SEVERITIES.indexOf(worstOf(a.vulns)) - SEVERITIES.indexOf(worstOf(b.vulns)) || Number(b.isDirect) - Number(a.isDirect) || a.name.localeCompare(b.name))
+    await setAudit($, { status: 'done', findings, checked: packages.length, at: Date.now() })
+  } catch (err) {
+    await setAudit($, { status: 'error', message: err instanceof Error ? err.message : String(err) })
+  }
+}
+
+// Puts one severity's vulnerabilities on the clipboard of the surface the
+// press came from.
+async function copyVulns($: EngineInterface, severity: Severity, surface: Parameters<EngineInterface['ui']['copy']>[0]['surface']): Promise<void> {
+  const state = await read($, audit)
+  if (state.status !== 'done') return
+  const copied = await $.ui.copy({ text: copyVulnsText(state.findings, severity), surface })
+  $.ui.toast(copied.isCopied ? 'Copié las vulnerabilidades.' : `No pude copiar: ${copied.reason}`)
+}
+
 type Scanned = { upgrades: Upgrade[]; held: number; checked: number; failed: number }
 
 // Any ecosystem but npm: what the manifest declares, what the lockfile says
@@ -343,8 +456,10 @@ async function scanProject($: EngineInterface, isFresh: boolean): Promise<void> 
     }
     const { upgrades, held, checked, failed } = all
     await setScan($, { status: 'done', upgrades: sortUpgrades(upgrades), held, checked, failed, at: Date.now(), ecosystems: ecosystems.map(e => e.adapter.id) })
-    // Haiku reads the majors in the background: the list shows at once.
+    // Haiku reads the majors and OSV the vulnerabilities in the background:
+    // the list shows at once.
     void explainMajors($, upgrades).catch(() => undefined)
+    void runAudit($).catch(() => undefined)
     await checkPending($)
   } catch (err) {
     await setScan($, { status: 'error', message: err instanceof Error ? err.message : String(err) })
@@ -568,16 +683,22 @@ async function upgradeBumps($: EngineInterface): Promise<void> {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: COMMAND, description: COMMAND_HELP, argumentHint: 'upgrade' })
-    // The section opens or stays folded as it was left.
+    await $.command.register({ name: COMMAND, description: COMMAND_HELP, argumentHint: 'upgrade | vulns' })
+    // Each section opens or stays folded as it was left.
     const open = await $.store.get(OPEN_KEY).catch(() => undefined)
     if (typeof open === 'boolean') await update($, isUpgradeOpen, () => open)
-    // Opens by itself only when the scan finds something to upgrade;
-    // /narsil-check upgrade opens it any time.
+    const vulnsOpen = await $.store.get(VULNS_OPEN_KEY).catch(() => undefined)
+    if (typeof vulnsOpen === 'boolean') await update($, isVulnsOpen, () => vulnsOpen)
+    // Opens by itself only when the scan finds something to upgrade or the
+    // audit a vulnerability; /narsil-check upgrade or vulns opens it any time.
     if ((await detected($)).length > 0) {
       void runScan($).then(async () => {
+        await auditing
         const state = await read($, scan)
-        if (state.status === 'done' && state.upgrades.length > 0) await $.ui.open({ id: PANE, title: TITLE })
+        const found = await read($, audit)
+        const hasUpgrades = state.status === 'done' && state.upgrades.length > 0
+        const hasVulns = found.status === 'done' && found.findings.length > 0
+        if (hasUpgrades || hasVulns) await $.ui.open({ id: PANE, title: TITLE })
       }).catch(() => undefined)
     }
     return next(e)
@@ -592,6 +713,12 @@ export const register: Register = on => {
       await $.ui.open({ id: PANE, title: TITLE })
       void runScan($, true).catch(() => undefined)
       return { text: 'Narsil Check: revisando las librerías del proyecto.' }
+    }
+    if (arg === 'vulns' || arg === 'vulnerabilidades') {
+      await update($, isVulnsOpen, () => true)
+      await $.ui.open({ id: PANE, title: TITLE })
+      void runAudit($).catch(() => undefined)
+      return { text: 'Narsil Check: buscando vulnerabilidades en OSV.dev.' }
     }
     return { text: commandHelp(arg) }
   })
@@ -634,11 +761,95 @@ export const register: Register = on => {
         <Button key="section-upgrade" plain label={sectionLabel(isOpen, state)} onPress={toggle} />
       </Box>
     )
+    // The vulnerabilities section: its own toggle and body, under upgrades.
+    const found = await read($, audit)
+    // How many of a declared package's vulnerabilities its upgrade fixes.
+    const direct = new Map(found.status === 'done' ? found.findings.filter(f => f.isDirect).map(f => [`${f.ecosystem}:${f.name}`, f]) : [])
+    const fixes = (u: Upgrade) => fixedBy(direct.get(`${u.ecosystem}:${u.name}`), u.latest)
+    const vulnsOpen = await read($, isVulnsOpen)
+    const toggleVulns = async () => {
+      const open = await update($, isVulnsOpen, value => !value)
+      await $.store.set(VULNS_OPEN_KEY, open).catch(() => undefined)
+    }
+    const vulnsSection = (
+      <Box flexDirection="row" gap={1} marginTop={1}>
+        <Text bold color={vulnsColor(found)}>
+          ●
+        </Text>
+        <Button key="section-vulns" plain label={vulnsLabel(vulnsOpen, found)} onPress={toggleVulns} />
+      </Box>
+    )
+    const vulnsBody = (() => {
+      if (found.status === 'idle' || found.status === 'scanning') return <Text dimColor>Buscando vulnerabilidades en OSV.dev…</Text>
+      if (found.status === 'error') {
+        return (
+          <Box flexDirection="column">
+            <Text color={PALETTE.error}>No pude consultar OSV.dev: {found.message}</Text>
+            <Button key="vulns-retry" onPress={() => runAudit($)}>
+              Reintentar
+            </Button>
+          </Box>
+        )
+      }
+      if (found.findings.length === 0) return <Text color={PALETTE.done}>{auditSummary(found.findings, found.checked)}</Text>
+      return (
+        <Box flexDirection="column">
+          <Text bold>{auditSummary(found.findings, found.checked)}</Text>
+          <Text dimColor>{agoLabel(found.at, Date.now()).replace('revisado', 'consultado')} · fuente: OSV.dev</Text>
+          {SEVERITIES.map(severity => {
+            const rows = bySeverity(found.findings, severity)
+            if (rows.length === 0) return undefined
+            const tone = SEVERITY_COLOR[severity]
+            return (
+              <Box flexDirection="column" marginTop={1}>
+                <Box flexDirection="row" gap={1}>
+                  <Text color={tone}>●</Text>
+                  <Text bold color={tone}>
+                    {SEVERITY_TITLE[severity]} ({rows.length})
+                  </Text>
+                </Box>
+                <Box>
+                  <Button key={`copy-vulns-${severity}`} plain onPress={press => copyVulns($, severity, press.surface)}>
+                    Copiar
+                  </Button>
+                </Box>
+                {rows.map(({ finding, vuln }) => (
+                  <Box flexDirection="column">
+                    <Text>
+                      {finding.display ?? finding.name} <Text dimColor>{finding.version}</Text>
+                      {finding.isDirect ? '' : <Text dimColor> · indirecta</Text>}
+                      <Text dimColor> · {vuln.id}</Text>
+                    </Text>
+                    <Text dimColor wrap="truncate-end">
+                      {'  '}
+                      {vuln.summary}
+                    </Text>
+                    <Text color={vuln.fixed ? PALETTE.done : PALETTE.muted}>
+                      {'  '}
+                      {vuln.fixed ? `Se corrige en ${vuln.fixed}` : 'Sin versión que la corrija'}
+                    </Text>
+                  </Box>
+                ))}
+              </Box>
+            )
+          })}
+          <Box flexDirection="row" gap={1} marginTop={1}>
+            <Text dimColor>➜</Text>
+            <Button key="vulns-refresh" onPress={() => runAudit($)}>
+              Consultar de nuevo
+            </Button>
+          </Box>
+        </Box>
+      )
+    })()
+
     const frame = (body: JSX.Element) => (
       <Box flexDirection="column">
         {head}
         {section}
         {isOpen ? body : null}
+        {vulnsSection}
+        {vulnsOpen ? vulnsBody : null}
       </Box>
     )
 
@@ -695,7 +906,8 @@ export const register: Register = on => {
           </Box>
         )}
         {GROUPS.map(g => {
-          const rows = state.upgrades.filter(u => u.group === g.group)
+          // An upgrade that fixes vulnerabilities goes first in its group.
+          const rows = state.upgrades.filter(u => u.group === g.group).sort((a, b) => fixes(b) - fixes(a))
           if (rows.length === 0) return undefined
           return (
             <Box flexDirection="column" marginTop={1}>
@@ -723,6 +935,7 @@ export const register: Register = on => {
                       {u.latest}
                       {u.isDev ? <Text dimColor> · dev</Text> : ''}
                       {state.ecosystems.length > 1 ? <Text dimColor> · {adapterOf(u.ecosystem).label}</Text> : ''}
+                      {fixes(u) > 0 ? <Text color={PALETTE.error}> · corrige {fixes(u) === 1 ? '1 vulnerabilidad' : `${fixes(u)} vulnerabilidades`}</Text> : ''}
                     </Text>
                     {line && (
                       <Text color={line.color} dimColor={line.isDim}>

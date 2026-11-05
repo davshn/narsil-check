@@ -178,6 +178,8 @@ export const PYPI: Adapter = {
   // alone there is no lockfile to refresh.
   installArgv: present => (present.includes('uv.lock') ? [['uv', 'lock']] : present.includes('poetry.lock') ? [['poetry', 'lock']] : []),
   managerOf: present => (present.includes('uv.lock') ? 'uv' : present.includes('poetry.lock') ? 'poetry' : 'pip'),
+  // uv.lock or poetry.lock's packages.
+  treeOf: files => [...lockedOf(files)].map(([name, version]) => ({ name, version })),
   importPattern: name => {
     const module = escapeRegex(importNameOf(name))
     return `^[[:space:]]*(import|from)[[:space:]]+${module}([.[:space:],]|$)`

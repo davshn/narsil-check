@@ -1,16 +1,17 @@
 // What the pane says, and the order it says it in. Pure: the hooks module
 // draws it.
 
-import type { Explained, Group, Job, Pr, Scan, Upgrade } from '../types'
+import type { Audit, Explained, Finding, Group, Job, Pr, Scan, Severity, Upgrade } from '../types'
+import { SEVERITIES, SEVERITY_TITLE, worstOf } from './osv'
 
 export const PANE = 'narsil-check'
 export const TITLE = 'Narsil Check'
 export const COMMAND = 'narsil-check'
-export const COMMAND_HELP = 'Narsil Check, revisiones del proyecto: upgrade'
+export const COMMAND_HELP = 'Narsil Check, revisiones del proyecto: upgrade | vulns'
 
 // What /narsil-check says to anything but a check it knows.
 export function commandHelp(arg: string): string {
-  const known = '/narsil-check upgrade: las librerías que se pueden actualizar.'
+  const known = '/narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas.'
   return arg ? `Narsil Check: no conozco "${arg}". Revisiones: ${known}` : `Narsil Check: revisiones del proyecto. ${known}`
 }
 
@@ -31,6 +32,44 @@ export const GROUPS: { group: Group; label: string; hint: string; color: string 
   { group: 'review', label: 'Versión mayor: revisar cambios', hint: 'pueden romper la API', color: PALETTE.waiting },
   { group: 'bump', label: 'Solo subir la versión', hint: 'parche o menor', color: PALETTE.done },
 ]
+
+// Each severity in Narsil's colors: what blocks is red, what waits yellow,
+// what can wait gray.
+export const SEVERITY_COLOR: Record<Severity, string> = {
+  critical: PALETTE.error,
+  high: PALETTE.error,
+  moderate: PALETTE.waiting,
+  low: PALETTE.muted,
+  unknown: PALETTE.muted,
+}
+
+function vulnCount(audit: Audit): number {
+  return audit.status === 'done' ? audit.findings.reduce((n, f) => n + f.vulns.length, 0) : 0
+}
+
+// The vulnerabilities toggle: its arrow, its name and, once checked, its count.
+export function vulnsLabel(isOpen: boolean, audit: Audit): string {
+  const count = vulnCount(audit)
+  return `${isOpen ? '▾' : '▸'} Vulnerabilidades${count > 0 ? ` · ${count}` : ''}`
+}
+
+// The section's dot: red for critical or high, yellow for moderate, gray for
+// low or unrated only, green for none.
+export function vulnsColor(audit: Audit): string {
+  if (audit.status === 'error') return PALETTE.error
+  if (audit.status !== 'done') return PALETTE.muted
+  if (audit.findings.length === 0) return PALETTE.done
+  return SEVERITY_COLOR[worstOf(audit.findings.flatMap(f => f.vulns))]
+}
+
+export function auditSummary(findings: Finding[], checked: number): string {
+  if (findings.length === 0) return `Sin vulnerabilidades conocidas · ${checked} paquetes revisados`
+  const vulns = findings.flatMap(f => f.vulns)
+  const parts = SEVERITIES.map(s => [s, vulns.filter(v => v.severity === s).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([s, n]) => `${n} ${SEVERITY_TITLE[s].toLowerCase()}${n === 1 ? '' : s === 'unknown' ? '' : 's'}`)
+  return `${vulns.length} ${vulns.length === 1 ? 'vulnerabilidad' : 'vulnerabilidades'} en ${findings.length} de ${checked} paquetes · ${parts.join(' · ')}`
+}
 
 // The section's toggle: its arrow, its name and, once scanned, its count.
 export function sectionLabel(isOpen: boolean, scan: Scan): string {

@@ -139,6 +139,18 @@ export const CARGO: Adapter = {
   // Cargo.lock follows the raised requirements.
   installArgv: (_, upgrades) => [['cargo', 'update', ...upgrades.flatMap(u => ['-p', u.name])]],
   managerOf: () => 'cargo',
+  // Cargo.lock's crates from crates.io (a path or git crate is the project's own).
+  treeOf: files => {
+    try {
+      const lock = parseToml(files[LOCK] ?? '')
+      return ((Array.isArray(lock.package) ? lock.package : []) as TomlValue[])
+        .map(p => tableOf(p))
+        .filter((t): t is TomlTable => !!t && typeof t.name === 'string' && typeof t.version === 'string' && typeof t.source === 'string' && t.source.startsWith('registry+'))
+        .map(t => ({ name: t.name as string, version: t.version as string }))
+    } catch {
+      return []
+    }
+  },
   // A crate is named with _ in code: `use serde_json::...`, `serde_json::from_str`.
   importPattern: name => {
     const ident = escapeRegex(name.replace(/-/g, '_'))

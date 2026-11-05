@@ -136,6 +136,11 @@ export const PUB: Adapter = {
   // through flutter, which brings its own Dart.
   installArgv: (_, __, files) => [[isFlutter(files) ? 'flutter' : 'dart', 'pub', 'get']],
   managerOf: () => 'pub',
+  // pubspec.lock's packages from pub.dev (an SDK, path or git one is not).
+  treeOf: files =>
+    Object.entries(sectionsOf(files[LOCK] ?? '').packages ?? {})
+      .filter(([, f]) => f.source === 'hosted' && !!f.version)
+      .map(([name, f]) => ({ name, version: f.version as string })),
   importPattern: name => `['"]package:${escapeRegex(name)}/`,
   repoUrlOf: text => {
     const pubspec = (JSON.parse(text) as { latest?: { pubspec?: { repository?: unknown; homepage?: unknown } } }).latest?.pubspec
