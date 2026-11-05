@@ -69,6 +69,12 @@ async function latestIn($: EngineInterface, adapter: Adapter, name: string, curr
   const key = `${adapter.id}:${name}`
   const cached = (await $.store.get(key)) as Cached | undefined
   if (!isFresh && cached && Date.now() - cached.at < CACHE_MS) return cached.version
+  if (adapter.latestCommand) {
+    const ran = await $.process.run(adapter.latestCommand(name), { timeoutMs: GIT_MS })
+    const found = ran.exitCode === 0 ? adapter.latestOf(ran.stdout) : undefined
+    if (found) await $.store.set(key, { version: found, at: Date.now() } satisfies Cached)
+    return found
+  }
   let res = await $.http.fetch(adapter.latestUrl(name), { headers: adapter.headers ?? {} })
   const alternate = res.ok ? undefined : adapter.alternateUrl?.(name)
   if (alternate) res = await $.http.fetch(alternate, { headers: adapter.headers ?? {} })
@@ -148,6 +154,9 @@ async function releaseNotes($: EngineInterface, u: Upgrade): Promise<string> {
   if (u.ecosystem === 'npm') {
     const installed = await readJson($, `node_modules/${u.name}/package.json`)
     repo = repoOf(installed) ?? repoOf(JSON.parse((await fetchText($, latestUrl(u.name))) ?? '{}'))
+  } else if (adapter.repoUrlFor) {
+    const url = adapter.repoUrlFor(u.name)
+    repo = url ? repoOf({ repository: url }) : undefined
   } else {
     const text = await fetchText($, adapter.infoUrl?.(u.name, u.latest) ?? adapter.latestUrl(u.name), adapter.headers)
     const url = text ? adapter.repoUrlOf(text) : undefined

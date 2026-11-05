@@ -8,7 +8,7 @@
 // dependency, so it cannot go up alone.
 export type Group = 'bump' | 'review' | 'expo' | 'blocked'
 
-export type Ecosystem = 'npm' | 'pypi' | 'go' | 'cargo' | 'pub' | 'maven' | 'nuget' | 'rubygems'
+export type Ecosystem = 'npm' | 'pypi' | 'go' | 'cargo' | 'pub' | 'maven' | 'nuget' | 'rubygems' | 'swiftpm'
 
 export type Upgrade = {
   name: string

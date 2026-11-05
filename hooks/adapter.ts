@@ -34,6 +34,13 @@ export type Adapter = {
   alternateUrl?: (name: string) => string | undefined
   headers?: Record<string, string>
   latestOf: (text: string) => string | undefined
+  // A command whose output `latestOf` reads, in place of `latestUrl`, for an
+  // ecosystem with no registry (SwiftPM: git ls-remote --tags on the
+  // package's own repository, which no API limit holds back).
+  latestCommand?: (name: string) => string[]
+  // The repository a name stands for, when the name is one (a SwiftPM
+  // package is its git URL): release notes need no registry answer.
+  repoUrlFor?: (name: string) => string | undefined
   // Where a registry's latest stays within one major because each major is
   // its own name (Go's /v2 module paths): the name of the next major.
   nextMajor?: (name: string, current: string) => string
