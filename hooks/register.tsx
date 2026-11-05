@@ -27,6 +27,33 @@ import { branchName, commitBody, commitTitle, isMainBranch, prBody, prUrlOf } fr
 import { EXPO_TABLE, LOCK, MANIFEST, expoTableUrl, installedFromManifest, installedOf, latestUrl, parseManifest, peerConflicts, pinConflicts, upgradeOf, versionUrl } from './npm'
 import type { Declared, Found, Installed } from './npm'
 import { baseOf, bumpOf, parseVersion, show } from './semver'
+import {
+  CONNECTORS_SERVER,
+  CONNECTORS_TOOL,
+  DIRECTORY_SERVER,
+  MOVE_TOOL,
+  NO_SESSION,
+  PICK_TOOL,
+  TERMINAL_SERVER,
+  TERMINAL_TOOL,
+  pathOf,
+  REMOTE_TOOL,
+  REMOTE_WORD,
+  SESSIONS_SERVER,
+  SESSION_TOOL,
+  connected,
+  connectorsColor,
+  connectorsLabel,
+  envLabel,
+  jsonOf,
+  parseConnectors,
+  parseRemote,
+  parseSession,
+  remoteColor,
+  textOf,
+  toolsLabel,
+} from './session'
+import type { Remote, SessionView } from '../types'
 import { COMMAND, COMMAND_HELP, GROUPS, PALETTE, PANE, TITLE, agoLabel, auditSummary, commandHelp, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, reasonLine, sortUpgrades, summaryOf, tail } from './words'
 
 // Change a tag when its type's fields change: it declines what an earlier
@@ -46,6 +73,13 @@ const OSV_MS = 30_000
 // Whether the upgrade section is open; kept in the store across sessions.
 const isUpgradeOpen = atom({ plugin: 'narsil-check', key: 'isUpgradeOpen' } as const, true, { shape: 'open-1' })
 const OPEN_KEY = 'section:upgrade:open'
+// The session section: what the app's session bar shows, and its two folds.
+const session = atom({ plugin: 'narsil-check', key: 'session' } as const, NO_SESSION, { shape: 'session-1' })
+const isEnvOpen = atom({ plugin: 'narsil-check', key: 'isEnvOpen' } as const, false, { shape: 'open-1' })
+const ENV_OPEN_KEY = 'section:env:open'
+const isConnectorsOpen = atom({ plugin: 'narsil-check', key: 'isConnectorsOpen' } as const, false, { shape: 'open-1' })
+const CONNECTORS_OPEN_KEY = 'section:connectors:open'
+const SESSION_MS = 15_000
 
 // Haiku reads each major jump once: its reading is kept in the store for good.
 const EXPLAIN_CONCURRENCY = 2
@@ -681,6 +715,98 @@ async function upgradeBumps($: EngineInterface): Promise<void> {
   await runScan($, true)
 }
 
+function setSession($: EngineInterface, fn: (view: SessionView) => SessionView): Promise<SessionView> {
+  return update($, session, fn)
+}
+
+const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err))
+
+// Reads what the session bar shows: the folder and branch from the engine and
+// git, the rest from the desktop app's own servers. A part that cannot be read
+// keeps its reason, so the section says why instead of staying empty.
+async function loadSession($: EngineInterface): Promise<void> {
+  const cwd = await $.session.cwd().catch(() => '')
+  const branch = await $.process
+    .run(['git', 'branch', '--show-current'], { timeoutMs: SESSION_MS })
+    .then(r => (r.exitCode === 0 ? r.stdout.trim() : ''))
+    .catch(() => '')
+
+  let connectors: Pick<SessionView, 'connectors' | 'connectorsError'>
+  try {
+    const result = await $.mcp.call(CONNECTORS_SERVER, CONNECTORS_TOOL)
+    const list = result.isError ? undefined : parseConnectors(result.structuredContent ?? jsonOf(result.content))
+    connectors = list ? { connectors: list } : { connectors: [], connectorsError: textOf(result.content) || 'respuesta sin conectores' }
+  } catch (err) {
+    connectors = { connectors: [], connectorsError: errorText(err) }
+  }
+
+  let where: Pick<SessionView, 'environment' | 'remote' | 'worktree' | 'remoteError'>
+  try {
+    const result = await $.mcp.call(SESSIONS_SERVER, SESSION_TOOL, { session_id: 'self' })
+    const read = result.isError ? undefined : parseSession(result.structuredContent ?? jsonOf(result.content))
+    where = read ?? { environment: '', remote: 'unknown', remoteError: textOf(result.content) || 'respuesta sin sesión' }
+  } catch (err) {
+    where = { environment: '', remote: 'unknown', remoteError: errorText(err) }
+  }
+
+  await setSession($, view => ({ isLoaded: true, cwd, branch, ...connectors, ...where, isSwitching: view.isSwitching }))
+}
+
+// Turns Remote Control on or off for this session, as the session bar's
+// switch does, then reads the state back.
+async function switchRemote($: EngineInterface, enabled: boolean): Promise<void> {
+  await setSession($, view => ({ ...view, isSwitching: true, remoteError: undefined }))
+  let remote: Remote | undefined
+  let remoteError: string | undefined
+  try {
+    const result = await $.mcp.call(SESSIONS_SERVER, REMOTE_TOOL, { session_id: 'self', enabled })
+    if (result.isError) remoteError = textOf(result.content) || 'el cambio fue rechazado'
+    else remote = parseRemote(result.content)
+  } catch (err) {
+    remoteError = errorText(err)
+  }
+  await setSession($, view => ({ ...view, isSwitching: false, ...(remote ? { remote } : {}), remoteError }))
+  if (!remoteError) {
+    $.ui.toast(enabled ? 'Control remoto activado.' : 'Control remoto desactivado.')
+    await loadSession($)
+  }
+}
+
+// The folder fold's click: the native folder picker, then the session moves
+// to the folder picked, as the app's own folder switch does.
+async function changeFolder($: EngineInterface): Promise<void> {
+  try {
+    const picked = await $.mcp.call(DIRECTORY_SERVER, PICK_TOOL)
+    const path = picked.isError ? undefined : pathOf(picked.content)
+    if (!path) {
+      if (picked.isError) $.ui.toast(`No pude abrir el selector de carpetas: ${textOf(picked.content)}`)
+      return
+    }
+    const moved = await $.mcp.call(DIRECTORY_SERVER, MOVE_TOOL, { path })
+    if (moved.isError) {
+      $.ui.toast(`No pude cambiar a ${path}: ${textOf(moved.content)}`)
+      return
+    }
+    $.ui.toast(`Carpeta de trabajo: ${path}`)
+    await setSession($, view => ({ ...view, cwd: path }))
+  } catch (err) {
+    $.ui.toast(`No pude cambiar la carpeta: ${errorText(err)}`)
+  }
+}
+
+// The branch's click: a new tab in the app's Terminal panel, in the session's
+// folder, named after the branch.
+async function openTerminal($: EngineInterface, view: SessionView): Promise<void> {
+  try {
+    const args: Record<string, unknown> = { title: view.branch || 'terminal' }
+    if (view.cwd) args.cwd = view.cwd
+    const opened = await $.mcp.call(TERMINAL_SERVER, TERMINAL_TOOL, args)
+    if (opened.isError) $.ui.toast(`No pude abrir la terminal: ${textOf(opened.content)}`)
+  } catch (err) {
+    $.ui.toast(`No pude abrir la terminal: ${errorText(err)}`)
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: COMMAND, description: COMMAND_HELP, argumentHint: 'upgrade | vulns' })
@@ -689,18 +815,14 @@ export const register: Register = on => {
     if (typeof open === 'boolean') await update($, isUpgradeOpen, () => open)
     const vulnsOpen = await $.store.get(VULNS_OPEN_KEY).catch(() => undefined)
     if (typeof vulnsOpen === 'boolean') await update($, isVulnsOpen, () => vulnsOpen)
-    // Opens by itself only when the scan finds something to upgrade or the
-    // audit a vulnerability; /narsil-check upgrade or vulns opens it any time.
-    if ((await detected($)).length > 0) {
-      void runScan($).then(async () => {
-        await auditing
-        const state = await read($, scan)
-        const found = await read($, audit)
-        const hasUpgrades = state.status === 'done' && state.upgrades.length > 0
-        const hasVulns = found.status === 'done' && found.findings.length > 0
-        if (hasUpgrades || hasVulns) await $.ui.open({ id: PANE, title: TITLE })
-      }).catch(() => undefined)
-    }
+    const envOpen = await $.store.get(ENV_OPEN_KEY).catch(() => undefined)
+    if (typeof envOpen === 'boolean') await update($, isEnvOpen, () => envOpen)
+    const connectorsOpen = await $.store.get(CONNECTORS_OPEN_KEY).catch(() => undefined)
+    if (typeof connectorsOpen === 'boolean') await update($, isConnectorsOpen, () => connectorsOpen)
+    void loadSession($).catch(() => undefined)
+    // Opens on every session: it stands in for the app's session bar.
+    await $.ui.open({ id: PANE, title: TITLE }).catch(() => undefined)
+    if ((await detected($)).length > 0) void runScan($).catch(() => undefined)
     return next(e)
   })
 
@@ -761,6 +883,103 @@ export const register: Register = on => {
         <Button key="section-upgrade" plain label={sectionLabel(isOpen, state)} onPress={toggle} />
       </Box>
     )
+    // The session section, first: what the app's session bar shows. Each
+    // fold reads the session again as it opens.
+    const view = await read($, session)
+    const envOpen = await read($, isEnvOpen)
+    const connectorsOpen = await read($, isConnectorsOpen)
+    const toggleEnv = async () => {
+      const open = await update($, isEnvOpen, value => !value)
+      await $.store.set(ENV_OPEN_KEY, open).catch(() => undefined)
+      if (open) await loadSession($)
+    }
+    const toggleConnectors = async () => {
+      const open = await update($, isConnectorsOpen, value => !value)
+      await $.store.set(CONNECTORS_OPEN_KEY, open).catch(() => undefined)
+      if (open) await loadSession($)
+    }
+    const up = connected(view)
+    const down = view.connectors.filter(c => c.status !== 'connected')
+    const sessionSection = (
+      <Box flexDirection="column">
+        <Box flexDirection="row" gap={1} marginTop={1}>
+          <Text bold color={view.isLoaded ? PALETTE.info : PALETTE.muted}>
+            ●
+          </Text>
+          <Button key="section-env" plain label={envLabel(envOpen)} onPress={toggleEnv} />
+        </Box>
+        {envOpen && (
+          <Box flexDirection="column">
+            {!view.isLoaded ? (
+              <Text dimColor>Leyendo la sesión…</Text>
+            ) : (
+              <Box flexDirection="column">
+                <Text>
+                  <Text dimColor>Entorno </Text>
+                  {view.environment || '—'}
+                </Text>
+                <Box flexDirection="row" gap={1}>
+                  <Text dimColor>Carpeta</Text>
+                  <Button key="env-folder" plain label={view.cwd || 'elegir carpeta'} onPress={() => changeFolder($)} />
+                </Box>
+                <Box flexDirection="row" gap={1}>
+                  <Text dimColor>Rama</Text>
+                  <Button key="env-branch" plain label={view.branch || 'sin git'} onPress={() => openTerminal($, view)} />
+                </Box>
+                {view.worktree && (
+                  <Text dimColor wrap="truncate-start">
+                    worktree {view.worktree}
+                  </Text>
+                )}
+              </Box>
+            )}
+          </Box>
+        )}
+        <Box flexDirection="row" gap={1} marginTop={1}>
+          <Text bold color={connectorsColor(view)}>
+            ●
+          </Text>
+          <Button key="section-connectors" plain label={connectorsLabel(connectorsOpen, view)} onPress={toggleConnectors} />
+        </Box>
+        {connectorsOpen && (
+          <Box flexDirection="column">
+            {!view.isLoaded ? (
+              <Text dimColor>Leyendo los conectores…</Text>
+            ) : view.connectorsError ? (
+              <Text color={PALETTE.error}>No pude leer los conectores: {view.connectorsError}</Text>
+            ) : up.length === 0 ? (
+              <Text dimColor>No hay conectores conectados.</Text>
+            ) : (
+              <Box flexDirection="column">
+                {up.map(c => (
+                  <Text>
+                    <Text color={PALETTE.done}>● </Text>
+                    {c.name}
+                    {c.tools !== undefined ? <Text dimColor> · {toolsLabel(c.tools)}</Text> : ''}
+                  </Text>
+                ))}
+                {down.length > 0 && <Text dimColor>{down.map(c => `${c.name} (${c.status})`).join(' · ')}</Text>}
+              </Box>
+            )}
+          </Box>
+        )}
+        <Box flexDirection="row" gap={1} marginTop={1}>
+          <Text bold color={remoteColor(view)}>
+            ●
+          </Text>
+          <Text>
+            Control remoto <Text dimColor>· {view.isSwitching ? 'cambiando…' : REMOTE_WORD[view.remote]}</Text>
+          </Text>
+          {!view.isSwitching && (view.remote === 'on' || view.remote === 'off' || view.remote === 'connecting') && (
+            <Button key="remote-switch" plain onPress={() => switchRemote($, view.remote === 'off')}>
+              {view.remote === 'off' ? 'Activar' : 'Desactivar'}
+            </Button>
+          )}
+        </Box>
+        {view.remoteError && <Text color={PALETTE.error}>No pude leer o cambiar el control remoto: {view.remoteError}</Text>}
+      </Box>
+    )
+
     // The vulnerabilities section: its own toggle and body, under upgrades.
     const found = await read($, audit)
     // How many of a declared package's vulnerabilities its upgrade fixes.
@@ -846,6 +1065,7 @@ export const register: Register = on => {
     const frame = (body: JSX.Element) => (
       <Box flexDirection="column">
         {head}
+        {sessionSection}
         {section}
         {isOpen ? body : null}
         {vulnsSection}

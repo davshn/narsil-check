@@ -108,6 +108,16 @@ La sección **Vulnerabilidades**, debajo de Actualizaciones, lista las vulnerabi
 
 El número de vulnerabilidades es el de avisos, no el de paquetes: `npm audit` cuenta además los paquetes que solo dependen de uno vulnerable, que aquí no se repiten.
 
+## La sesión
+
+Arriba de todo, antes de Actualizaciones, el panel muestra lo que enseña la barra de sesión de la app de escritorio, para poder ocultar esa barra:
+
+- **▸ Entorno:** al desplegarlo, el entorno (Local o Nube), la carpeta de trabajo y la rama de git. Un clic en la carpeta abre el selector de carpetas y mueve la sesión a la que elijas; un clic en la rama abre una pestaña de terminal en la carpeta de trabajo.
+- **▸ Conectores · 6:** al desplegarlo, los conectores conectados y cuántas herramientas tiene cada uno; los que no están conectados aparecen debajo con su estado (`Gmail (needs_auth)`).
+- **Control remoto:** su estado y un botón **Activar** / **Desactivar**.
+
+Entorno, conectores y control remoto se leen de los servidores MCP propios de la app de escritorio (`ccd_connectors` y `ccd_session_mgmt`), así que solo funcionan dentro de ella; en la terminal la sección dice por qué no pudo leerlos. Cada desplegable vuelve a leer la sesión al abrirse.
+
 ## Comandos
 
 Como `/narsil <opción>` en Narsil, cada revisión es un argumento de `/narsil-check`:
@@ -116,7 +126,7 @@ Como `/narsil <opción>` en Narsil, cada revisión es un argumento de `/narsil-c
 - `/narsil-check vulns`: abre el panel con la sección **Vulnerabilidades** desplegada y vuelve a consultar OSV.dev.
 - `/narsil-check` sin argumento, o con uno que no conoce, responde con la lista de revisiones.
 
-El panel se abre solo al empezar una sesión cuando hay librerías para actualizar o vulnerabilidades. Si no hay nada, no se abre: usa `/narsil-check upgrade` o `/narsil-check vulns`.
+El panel se abre al empezar cada sesión, aunque no haya nada que actualizar, porque reemplaza a la barra de sesión.
 
 ## El panel
 

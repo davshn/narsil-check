@@ -279,15 +279,13 @@ test('opening a project with upgrades opens the pane and lists them, on every su
   }
 })
 
-test('the pane does not open by itself when everything is current, and /upgrades opens it', async ($, on) => {
+test('the pane opens even when everything is current, and /upgrades opens it again', async ($, on) => {
   const opened: string[] = []
   project(on, { ...FILES }, { react: '18.2.0', zod: '3.22.4', lodash: '4.17.21', typescript: '5.4.5' }, opened)
 
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await scanned($)
-  // Room for an open the mod should not make.
-  await until(() => opened.length > 0)
-  expect(opened).toEqual([])
+  expect(opened).toEqual(['narsil-check'])
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /al día/ }))?.text).toBe('Todo al día · 4 librerías revisadas')
@@ -295,16 +293,16 @@ test('the pane does not open by itself when everything is current, and /upgrades
 
   await $.command.run({ command: 'narsil-check', args: 'upgrade', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
   await scanned($)
-  expect(opened).toEqual(['narsil-check'])
+  expect(opened).toEqual(['narsil-check', 'narsil-check'])
 })
 
-test('the pane does not open where there is no package.json', async ($, on) => {
+test('the pane opens on every session, a project without manifests too: it stands in for the session bar', async ($, on) => {
   const opened: string[] = []
   project(on, {}, {}, opened)
 
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
 
-  expect(opened).toEqual([])
+  expect(opened).toEqual(['narsil-check'])
 })
 
 test('a scan an earlier version stored is declined', async ($, on) => {
