@@ -48,5 +48,5 @@ export function adapterOf(id: Ecosystem): Adapter {
   return ADAPTERS.find(a => a.id === id) ?? NPM
 }
 
-export { escapeRegex, globRegex, manifestOf, manifestsOf, specChanges } from './adapter'
+export { escapeRegex, globRegex, holdNote, manifestOf, manifestsOf, specChanges } from './adapter'
 export type { Adapter, Dep, Files } from './adapter'

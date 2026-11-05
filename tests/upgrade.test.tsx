@@ -669,7 +669,7 @@ test('a blocked upgrade shows what blocks it and the button leaves it out', asyn
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /^Bloqueada/ }))?.text).toBe('Bloqueada por otras dependencias (1)')
+  expect((await ui.find({ type: 'Text', text: /^Bloqueada/ }))?.text).toBe('Bloqueada (1)')
   expect((await ui.find({ type: 'Text', text: /exige typescript/ }))?.text).toBe('  ts-plugin exige typescript ~5.4.0')
   expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('3 para actualizar de 5 · 1 bloqueadas · 1 mayores · 1 triviales')
 
@@ -705,7 +705,7 @@ test('the blocked and the major groups each copy their own list', async ($, on) 
   await ui.press({ key: 'copy-majors' })
 
   expect(copied).toEqual([
-    'Librerías bloqueadas por otras dependencias:\n- typescript 5.4.5 → 5.9.3: ts-plugin exige typescript ~5.4.0',
+    'Librerías bloqueadas:\n- typescript 5.4.5 → 5.9.3: ts-plugin exige typescript ~5.4.0',
     'Librerías con versión mayor pendiente:\n- react 18.2.0 → 19.2.0',
   ])
   await ui.unmount()

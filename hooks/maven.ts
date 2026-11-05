@@ -232,6 +232,59 @@ export function rewriteMaven(files: Files, upgrades: Upgrade[]): Files {
   return out
 }
 
+// Kotlin compiler plugins: each release is built for specific Kotlin
+// versions, so Kotlin cannot go up past what they support. Found by their
+// coordinates, or by the catalog's version key when a build-logic module
+// reads the version directly (libs.versions.mokkery).
+const COMPILER_PLUGINS: { label: string; group: RegExp; key: RegExp }[] = [
+  { label: 'SKIE', group: /^co\.touchlab\.skie[.:]/, key: /^skie$/i },
+  { label: 'KSP', group: /^com\.google\.devtools\.ksp[.:]/, key: /^ksp$/i },
+  { label: 'Mokkery', group: /^dev\.mokkery[.:]/, key: /^mokkery$/i },
+  { label: 'Realm', group: /^io\.realm\.kotlin[.:]/, key: /^realm(-kotlin)?$/i },
+  { label: 'Metro', group: /^dev\.zacsweers\.metro[.:]/, key: /^metro$/i },
+  { label: 'kotlinx-rpc', group: /^org\.jetbrains\.kotlinx\.rpc[.:]/, key: /^(kotlinx-)?rpc$/i },
+  { label: 'Anvil', group: /^com\.squareup\.anvil[.:]/, key: /^anvil$/i },
+]
+
+// Kotlin itself: its standard library and its Gradle plugins, never
+// kotlinx (org.jetbrains.kotlinx.coroutines goes up on its own).
+export function isKotlin(name: string): boolean {
+  return /^org\.jetbrains\.kotlin[.:]/.test(name)
+}
+
+// What a Kotlin upgrade breaks: each compiler plugin the project declares.
+// KSP's version names the Kotlin it is built for (2.4.20-1.0.30), so that
+// one is checked exactly; a KSP2 version with no Kotlin in it works with
+// any. The others are asked to be confirmed.
+export function kotlinConflicts(u: Upgrade, deps: Dep[], files: Files): string[] {
+  if (!isKotlin(u.name)) return []
+  const found = new Map<string, string>()
+  for (const d of deps) {
+    const plugin = COMPILER_PLUGINS.find(p => p.group.test(d.name))
+    if (plugin && !found.has(plugin.label)) found.set(plugin.label, d.spec)
+  }
+  try {
+    const versions = tableOf(parseToml(files[CATALOG] ?? '').versions) ?? {}
+    for (const [key, value] of Object.entries(versions)) {
+      const plugin = COMPILER_PLUGINS.find(p => p.key.test(key))
+      const version = catalogVersion(value)
+      if (plugin && version && !found.has(plugin.label)) found.set(plugin.label, version)
+    }
+  } catch {
+    // An unreadable catalog: the coordinates alone.
+  }
+  const conflicts: string[] = []
+  for (const [label, version] of found) {
+    if (label === 'KSP') {
+      const builtFor = /^(\d+\.\d+\.\d+)-/.exec(version)?.[1]
+      if (builtFor && builtFor !== u.latest) conflicts.push(`KSP ${version} está hecho para Kotlin ${builtFor}: hace falta un KSP para ${u.latest}`)
+      continue
+    }
+    conflicts.push(`${label} ${version} es un plugin del compilador de Kotlin: confirma que soporta Kotlin ${u.latest}`)
+  }
+  return conflicts
+}
+
 export const MAVEN: Adapter = {
   id: 'maven',
   label: 'Maven',
@@ -255,6 +308,7 @@ export const MAVEN: Adapter = {
   // A package is named after its group most of the time: import io.ktor.client.
   importPattern: name => `^[[:space:]]*import[[:space:]]+(static[[:space:]]+)?${escapeRegex(split(name)[0])}\\.`,
   infoUrl: pomUrl,
+  conflictsOf: kotlinConflicts,
   repoUrlOf: pom => {
     const scm = /<scm>[\s\S]*?<url>\s*([^<\s]+)\s*<\/url>/.exec(pom)?.[1]
     const url = scm ?? /<url>\s*([^<\s]*github\.com[^<\s]*)\s*<\/url>/.exec(pom)?.[1]

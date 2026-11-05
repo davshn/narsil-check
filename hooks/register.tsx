@@ -19,7 +19,7 @@ import {
   repoOf,
 } from './explain'
 import type { Reason } from './explain'
-import { ADAPTERS, NPM, adapterOf, manifestOf, manifestsOf, specChanges } from './ecosystems'
+import { ADAPTERS, NPM, adapterOf, holdNote, manifestOf, manifestsOf, specChanges } from './ecosystems'
 import type { Adapter, Dep, Files } from './ecosystems'
 import { branchName, commitBody, commitTitle, isMainBranch, prBody, prUrlOf } from './git'
 import { EXPO_TABLE, LOCK, MANIFEST, expoTableUrl, installedFromManifest, installedOf, latestUrl, parseManifest, peerConflicts, pinConflicts, upgradeOf, versionUrl } from './npm'
@@ -311,6 +311,14 @@ async function scanGeneric($: EngineInterface, adapter: Adapter, present: string
     }
   })
   const upgrades = found.filter((f): f is Upgrade => typeof f === 'object')
+  // An upgrade the project keeps on purpose, or one the ecosystem knows
+  // breaks something else, cannot go up alone, whatever its jump.
+  for (const u of upgrades) {
+    const ref = u.source?.startsWith('catalog:versions.') ? u.source.slice('catalog:versions.'.length) : undefined
+    const hold = holdNote(files, [u.name, u.display ?? '', ref ?? ''], u.spec)
+    u.conflicts = [...(hold ? [`Fijada a propósito: «${hold}»`] : []), ...(adapter.conflictsOf?.(u, deps, files) ?? [])]
+    if (u.conflicts.length > 0) u.group = 'blocked'
+  }
   return { upgrades, held: 0, checked: found.filter(f => f !== undefined).length, failed }
 }
 

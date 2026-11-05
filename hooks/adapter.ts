@@ -57,6 +57,47 @@ export type Adapter = {
   // (a version's POM, nuspec or gem record).
   repoUrlOf: (latestText: string) => string | undefined
   infoUrl?: (name: string, latest: string) => string
+  // What else in the project an upgrade breaks, in words, when the
+  // ecosystem knows (Kotlin and the compiler plugins built for one Kotlin).
+  conflictsOf?: (upgrade: Upgrade, deps: Dep[], files: Files) => string[]
+}
+
+// Words that say a version is kept on purpose: "pin", "hold", "keep",
+// "freeze", "do not upgrade", and in Spanish "fijar", "fijado",
+// "congelado", "no actualizar".
+const HOLD = /\b(pin(ned)?|hold|keep|freeze|frozen|do ?n[o']t (upgrade|update|bump)|fij(ar|ad[oa]|o)|congelad[oa]|no (actualizar|subir))\b/i
+
+// The comment a line carries: after #, // or <!--, or the line itself
+// when it is only a comment.
+function commentOf(line: string): string | undefined {
+  const m = /(?:^|\s)(?:#|\/\/|<!--)\s*(.*?)\s*(?:-->)?\s*$/.exec(line)
+  return m ? (m[1] as string) : undefined
+}
+
+function mentions(line: string, key: string): boolean {
+  return new RegExp(`(^|[^\\w.-])${escapeRegex(key)}([^\\w.-]|$)`).test(line)
+}
+
+// Why a dependency is kept where it is, when its manifest says so: a
+// comment with a hold word on the line that writes its version, or on the
+// line just above it. `keys` are the names the line may use for it (its
+// name, a catalog's version key).
+export function holdNote(files: Files, keys: string[], spec: string): string | undefined {
+  for (const text of Object.values(files)) {
+    const lines = text.split(/\r?\n/)
+    for (let n = 0; n < lines.length; n++) {
+      const line = lines[n] as string
+      if (!line.includes(spec) || !keys.some(k => k && mentions(line, k))) continue
+      // The line above counts only when it is a comment alone: a trailing
+      // comment there is another declaration's.
+      const above = lines[n - 1] ?? ''
+      for (const candidate of [line, /^\s*(#|\/\/|<!--)/.test(above) ? above : '']) {
+        const comment = commentOf(candidate)
+        if (comment && HOLD.test(comment)) return comment
+      }
+    }
+  }
+  return undefined
 }
 
 // A glob as a regex: "**/" any directories (none included), "*" within one.

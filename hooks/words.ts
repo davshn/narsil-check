@@ -9,7 +9,7 @@ export const COMMAND = 'upgrades'
 
 export const GROUPS: { group: Group; label: string; hint: string; color: string }[] = [
   { group: 'expo', label: 'Fuera del SDK de Expo', hint: 'npx expo install --fix', color: 'red' },
-  { group: 'blocked', label: 'Bloqueada por otras dependencias', hint: 'no se puede subir sola: primero lo que la bloquea', color: 'magenta' },
+  { group: 'blocked', label: 'Bloqueada', hint: 'no se puede subir sola: el motivo está debajo', color: 'magenta' },
   { group: 'review', label: 'Versión mayor: revisar cambios', hint: 'pueden romper la API', color: 'yellow' },
   { group: 'bump', label: 'Solo subir la versión', hint: 'parche o menor', color: 'green' },
 ]

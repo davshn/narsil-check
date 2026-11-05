@@ -109,7 +109,7 @@ export function copyText(rows: Upgrade[], reasons: Record<string, Reason | undef
   const majors = rows.filter(u => u.group === 'review')
   const lines: string[] = []
   if (blocked.length > 0) {
-    lines.push('Librerías bloqueadas por otras dependencias:')
+    lines.push('Librerías bloqueadas:')
     for (const u of blocked) lines.push(`- ${u.display ?? u.name} ${u.current} → ${u.latest}: ${u.conflicts.join('; ')}`)
   }
   if (majors.length > 0) {
