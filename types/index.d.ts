@@ -72,12 +72,13 @@ export type Explained =
 
 declare module 'claude-code' {
   interface PluginState {
-    'upgrade-mod': {
+    'narsil-check': {
       scan: Shaped<Scan>
       job: Shaped<Job>
       pending: Shaped<Pending>
       pr: Shaped<Pr>
       reasons: Shaped<Record<string, Explained>>
+      isUpgradeOpen: Shaped<boolean>
     }
   }
 }

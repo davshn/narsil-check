@@ -25,16 +25,19 @@ import { branchName, commitBody, commitTitle, isMainBranch, prBody, prUrlOf } fr
 import { EXPO_TABLE, LOCK, MANIFEST, expoTableUrl, installedFromManifest, installedOf, latestUrl, parseManifest, peerConflicts, pinConflicts, upgradeOf, versionUrl } from './npm'
 import type { Declared, Found, Installed } from './npm'
 import { baseOf, bumpOf, parseVersion, show } from './semver'
-import { COMMAND, GROUPS, PANE, TITLE, agoLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, reasonLine, sortUpgrades, summaryOf, tail } from './words'
+import { COMMAND, COMMAND_HELP, GROUPS, PALETTE, PANE, TITLE, agoLabel, commandHelp, sectionColor, sectionLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, reasonLine, sortUpgrades, summaryOf, tail } from './words'
 
 // Change a tag when its type's fields change: it declines what an earlier
 // version stored, which outlives a reload.
-const scan = atom({ plugin: 'upgrade-mod', key: 'scan' } as const, { status: 'idle' } as Scan, { shape: 'scan-4' })
-const job = atom({ plugin: 'upgrade-mod', key: 'job' } as const, { status: 'idle' } as Job, { shape: 'job-1' })
+const scan = atom({ plugin: 'narsil-check', key: 'scan' } as const, { status: 'idle' } as Scan, { shape: 'scan-4' })
+const job = atom({ plugin: 'narsil-check', key: 'job' } as const, { status: 'idle' } as Job, { shape: 'job-1' })
 const NO_PENDING: Pending = { changes: [], files: [], manager: 'npm', branch: '', isMain: false }
-const pending = atom({ plugin: 'upgrade-mod', key: 'pending' } as const, NO_PENDING, { shape: 'pending-2' })
-const pr = atom({ plugin: 'upgrade-mod', key: 'pr' } as const, { status: 'idle' } as Pr, { shape: 'pr-2' })
-const reasons = atom({ plugin: 'upgrade-mod', key: 'reasons' } as const, {} as Record<string, Explained>, { shape: 'reasons-1' })
+const pending = atom({ plugin: 'narsil-check', key: 'pending' } as const, NO_PENDING, { shape: 'pending-2' })
+const pr = atom({ plugin: 'narsil-check', key: 'pr' } as const, { status: 'idle' } as Pr, { shape: 'pr-2' })
+const reasons = atom({ plugin: 'narsil-check', key: 'reasons' } as const, {} as Record<string, Explained>, { shape: 'reasons-1' })
+// Whether the upgrade section is open; kept in the store across sessions.
+const isUpgradeOpen = atom({ plugin: 'narsil-check', key: 'isUpgradeOpen' } as const, true, { shape: 'open-1' })
+const OPEN_KEY = 'section:upgrade:open'
 
 // Haiku reads each major jump once: its reading is kept in the store for good.
 const EXPLAIN_CONCURRENCY = 2
@@ -565,9 +568,12 @@ async function upgradeBumps($: EngineInterface): Promise<void> {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: COMMAND, description: 'Abre el panel con las librerías que se pueden actualizar' })
-    // Opens by itself only when the scan finds something to upgrade; /upgrades
-    // opens it any time.
+    await $.command.register({ name: COMMAND, description: COMMAND_HELP, argumentHint: 'upgrade' })
+    // The section opens or stays folded as it was left.
+    const open = await $.store.get(OPEN_KEY).catch(() => undefined)
+    if (typeof open === 'boolean') await update($, isUpgradeOpen, () => open)
+    // Opens by itself only when the scan finds something to upgrade;
+    // /narsil-check upgrade opens it any time.
     if ((await detected($)).length > 0) {
       void runScan($).then(async () => {
         const state = await read($, scan)
@@ -577,10 +583,17 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: COMMAND }, async $ => {
-    await $.ui.open({ id: PANE, title: TITLE })
-    void runScan($, true).catch(() => undefined)
-    return { text: 'Revisando las librerías del proyecto.' }
+  // /narsil-check <check>, as /narsil <option>: each check by name, and the
+  // list of them for anything else.
+  on('command.run', { command: COMMAND }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase().replace(/\s+/g, ' ')
+    if (arg === 'upgrade') {
+      await update($, isUpgradeOpen, () => true)
+      await $.ui.open({ id: PANE, title: TITLE })
+      void runScan($, true).catch(() => undefined)
+      return { text: 'Narsil Check: revisando las librerías del proyecto.' }
+    }
+    return { text: commandHelp(arg) }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -595,36 +608,76 @@ export const register: Register = on => {
     const ship = () => publish($)
     const note = jobNote(work)
     const prText = prNote(request)
+    const isOpen = await read($, isUpgradeOpen)
+    const toggle = async () => {
+      const open = await update($, isUpgradeOpen, value => !value)
+      await $.store.set(OPEN_KEY, open).catch(() => undefined)
+    }
+
+    // The pane's own head, as Narsil's band: a colored dot and its name.
+    const head = (
+      <Box flexDirection="row" gap={1}>
+        <Text bold color={PALETTE.info}>
+          ● Narsil Check
+        </Text>
+        <Text dimColor>· revisiones del proyecto</Text>
+      </Box>
+    )
+    // The upgrade section's head: a toggle, its name in the color of what
+    // most needs you, and its count when it has one.
+    const color = sectionColor(state)
+    const section = (
+      <Box flexDirection="row" gap={1} marginTop={1}>
+        <Text bold color={color}>
+          ●
+        </Text>
+        <Button key="section-upgrade" plain label={sectionLabel(isOpen, state)} onPress={toggle} />
+      </Box>
+    )
+    const frame = (body: JSX.Element) => (
+      <Box flexDirection="column">
+        {head}
+        {section}
+        {isOpen ? body : null}
+      </Box>
+    )
 
     if (state.status === 'idle' || state.status === 'scanning') {
-      return <Text dimColor>Buscando actualizaciones…</Text>
+      return frame(<Text dimColor>Buscando actualizaciones…</Text>)
     }
     if (state.status === 'none') {
-      return (
+      return frame(
         <Box flexDirection="column">
           <Text>No encontré dependencias que revisar en este proyecto.</Text>
           <Text dimColor>Reviso npm y Expo (package.json), PyPI (pyproject.toml, requirements.txt), Go (go.mod), Cargo (Cargo.toml), Pub (pubspec.yaml), Gradle y Maven (libs.versions.toml, build.gradle.kts, pom.xml), NuGet (.csproj), RubyGems (Gemfile) y SwiftPM (Package.swift, proyectos de Xcode).</Text>
-        </Box>
+        </Box>,
       )
     }
     if (state.status === 'error') {
-      return (
+      return frame(
         <Box flexDirection="column">
-          <Text color="red">No pude revisar las librerías: {state.message}</Text>
+          <Text color={PALETTE.error}>No pude revisar las librerías: {state.message}</Text>
           <Button onPress={refresh}>Reintentar</Button>
-        </Box>
+        </Box>,
       )
     }
 
     const notes = [heldNote(state.held), failedNote(state.failed)].filter(n => n !== undefined)
-    return (
+    return frame(
       <Box flexDirection="column">
         <Text bold>{summaryOf(state.upgrades, state.checked)}</Text>
         <Text dimColor>{agoLabel(state.at, Date.now())}</Text>
         {note && <Text color={note.color}>{note.text}</Text>}
         {(waiting.changes.length > 0 || request.status !== 'idle') && (
           <Box flexDirection="column" marginTop={1}>
-            {waiting.changes.length > 0 && <Text bold color="cyan">{pendingLabel(waiting.changes.length)}</Text>}
+            {waiting.changes.length > 0 && (
+              <Box flexDirection="row" gap={1}>
+                <Text color={PALETTE.info}>●</Text>
+                <Text bold color={PALETTE.info}>
+                  {pendingLabel(waiting.changes.length)}
+                </Text>
+              </Box>
+            )}
             {waiting.changes.map(c => (
               <Text dimColor>
                 {c.name} {c.from} → {c.to}
@@ -646,9 +699,12 @@ export const register: Register = on => {
           if (rows.length === 0) return undefined
           return (
             <Box flexDirection="column" marginTop={1}>
-              <Text bold color={g.color}>
-                {g.label} ({rows.length})
-              </Text>
+              <Box flexDirection="row" gap={1}>
+                <Text color={g.color}>●</Text>
+                <Text bold color={g.color}>
+                  {g.label} ({rows.length})
+                </Text>
+              </Box>
               <Text dimColor>{g.hint}</Text>
               {(g.group === 'blocked' || g.group === 'review') && (
                 <Box>
@@ -659,7 +715,7 @@ export const register: Register = on => {
               )}
               {rows.map(u => {
                 const why = g.group === 'review' ? explained[reasonKey(u)] : undefined
-                const line = g.group === 'blocked' ? { text: u.conflicts.join(' · '), color: 'magenta', isDim: false } : reasonLine(why)
+                const line = g.group === 'blocked' ? { text: u.conflicts.join(' · '), color: PALETTE.error, isDim: false } : reasonLine(why)
                 return (
                   <Box flexDirection="column">
                     <Text>
@@ -690,10 +746,11 @@ export const register: Register = on => {
         {notes.map(n => (
           <Text dimColor>{n}</Text>
         ))}
-        <Box marginTop={1}>
+        <Box flexDirection="row" gap={1} marginTop={1}>
+          <Text dimColor>➜</Text>
           <Button onPress={refresh}>Revisar de nuevo</Button>
         </Box>
-      </Box>
+      </Box>,
     )
   })
 }

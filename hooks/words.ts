@@ -1,18 +1,53 @@
 // What the pane says, and the order it says it in. Pure: the hooks module
 // draws it.
 
-import type { Explained, Group, Job, Pr, Upgrade } from '../types'
+import type { Explained, Group, Job, Pr, Scan, Upgrade } from '../types'
 
-export const PANE = 'upgrades'
-export const TITLE = 'Actualizaciones'
-export const COMMAND = 'upgrades'
+export const PANE = 'narsil-check'
+export const TITLE = 'Narsil Check'
+export const COMMAND = 'narsil-check'
+export const COMMAND_HELP = 'Narsil Check, revisiones del proyecto: upgrade'
+
+// What /narsil-check says to anything but a check it knows.
+export function commandHelp(arg: string): string {
+  const known = '/narsil-check upgrade: las librerías que se pueden actualizar.'
+  return arg ? `Narsil Check: no conozco "${arg}". Revisiones: ${known}` : `Narsil Check: revisiones del proyecto. ${known}`
+}
+
+// Narsil's palette, so both mods read as one: blue for what is running or
+// informs, gray for what rests, yellow for what waits on you, green for
+// what is done, red for what failed or blocks.
+export const PALETTE = {
+  info: '#3B8BFF',
+  muted: '#8A90A6',
+  waiting: '#F5B400',
+  done: '#22B573',
+  error: '#F0435A',
+} as const
 
 export const GROUPS: { group: Group; label: string; hint: string; color: string }[] = [
-  { group: 'expo', label: 'Fuera del SDK de Expo', hint: 'npx expo install --fix', color: 'red' },
-  { group: 'blocked', label: 'Bloqueada', hint: 'no se puede subir sola: el motivo está debajo', color: 'magenta' },
-  { group: 'review', label: 'Versión mayor: revisar cambios', hint: 'pueden romper la API', color: 'yellow' },
-  { group: 'bump', label: 'Solo subir la versión', hint: 'parche o menor', color: 'green' },
+  { group: 'expo', label: 'Fuera del SDK de Expo', hint: 'npx expo install --fix', color: PALETTE.info },
+  { group: 'blocked', label: 'Bloqueada', hint: 'no se puede subir sola: el motivo está debajo', color: PALETTE.error },
+  { group: 'review', label: 'Versión mayor: revisar cambios', hint: 'pueden romper la API', color: PALETTE.waiting },
+  { group: 'bump', label: 'Solo subir la versión', hint: 'parche o menor', color: PALETTE.done },
 ]
+
+// The section's toggle: its arrow, its name and, once scanned, its count.
+export function sectionLabel(isOpen: boolean, scan: Scan): string {
+  const count = scan.status === 'done' && scan.upgrades.length > 0 ? ` · ${scan.upgrades.length}` : ''
+  return `${isOpen ? '▾' : '▸'} Actualizaciones${count}`
+}
+
+// The section's color: what most needs you, as Narsil colors its states.
+export function sectionColor(scan: Scan): string {
+  if (scan.status === 'error') return PALETTE.error
+  if (scan.status !== 'done') return PALETTE.muted
+  const groups = new Set(scan.upgrades.map(u => u.group))
+  if (groups.has('blocked')) return PALETTE.error
+  if (groups.has('review')) return PALETTE.waiting
+  if (groups.has('expo')) return PALETTE.info
+  return PALETTE.done
+}
 
 export function sortUpgrades(list: Upgrade[]): Upgrade[] {
   const rank = (u: Upgrade) => GROUPS.findIndex(g => g.group === u.group)
@@ -41,11 +76,11 @@ export function failedNote(failed: number): string | undefined {
 export function jobNote(job: Job): { text: string; color: string } | undefined {
   switch (job.status) {
     case 'running':
-      return { text: `Actualizando ${job.count} ${job.count === 1 ? 'librería' : 'librerías'} con ${job.manager}…`, color: 'yellow' }
+      return { text: `Actualizando ${job.count} ${job.count === 1 ? 'librería' : 'librerías'} con ${job.manager}…`, color: PALETTE.waiting }
     case 'failed':
-      return { text: job.message, color: 'red' }
+      return { text: job.message, color: PALETTE.error }
     case 'upgraded':
-      return { text: `Actualicé ${job.count} ${job.count === 1 ? 'librería' : 'librerías'}. Ejecuta los tests antes de hacer commit.`, color: 'green' }
+      return { text: `Actualicé ${job.count} ${job.count === 1 ? 'librería' : 'librerías'}. Ejecuta los tests antes de hacer commit.`, color: PALETTE.done }
     default:
       return undefined
   }
@@ -55,7 +90,7 @@ export function pendingLabel(count: number): string {
   return `Sin commit: ${count} ${count === 1 ? 'librería actualizada' : 'librerías actualizadas'} en package.json`
 }
 
-const DIFFICULTY_COLOR = { baja: 'green', media: 'yellow', alta: 'red' } as const
+const DIFFICULTY_COLOR = { baja: PALETTE.done, media: PALETTE.waiting, alta: PALETTE.error } as const
 
 // The line under a major upgrade: Haiku's reason, or that it is reading.
 export function reasonLine(why: Explained | undefined): { text: string; color?: string; isDim: boolean } | undefined {
@@ -80,13 +115,13 @@ export function publishLabel(branch: string, isMain: boolean): string {
 export function prNote(pr: Pr): { text: string; color: string } | undefined {
   switch (pr.status) {
     case 'running':
-      return { text: `${pr.step}…`, color: 'yellow' }
+      return { text: `${pr.step}…`, color: PALETTE.waiting }
     case 'failed':
-      return { text: `No pude crear el PR. ${pr.message}`, color: 'red' }
+      return { text: `No pude crear el PR. ${pr.message}`, color: PALETTE.error }
     case 'done':
       return pr.url
-        ? { text: `PR creado desde la rama ${pr.branch}. Sigues en esa rama.`, color: 'green' }
-        : { text: `Commit subido a la rama ${pr.branch}.`, color: 'green' }
+        ? { text: `PR creado desde la rama ${pr.branch}. Sigues en esa rama.`, color: PALETTE.done }
+        : { text: `Commit subido a la rama ${pr.branch}.`, color: PALETTE.done }
     default:
       return undefined
   }

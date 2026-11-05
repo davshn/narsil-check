@@ -1,6 +1,6 @@
-# upgrade-mod
+# narsil-check
 
-Un mod de Claude Code que, al abrir un proyecto con librerías desactualizadas, muestra en un panel qué se puede actualizar y cuánto cuesta hacerlo. Lee proyectos de JavaScript y TypeScript (npm y Expo), Python (PyPI), Go, Rust (Cargo), Dart o Flutter (Pub), Kotlin y Java (Gradle y Maven), C# (NuGet), Ruby (RubyGems) y Swift (SwiftPM).
+Narsil Check es un mod de Claude Code, compañero de [Narsil](https://github.com/davshn/narsil-pet), que revisa el proyecto en un panel lateral con sus mismos colores. Su primera revisión, **Actualizaciones**, muestra al abrir un proyecto con librerías desactualizadas qué se puede actualizar y cuánto cuesta hacerlo. Lee proyectos de JavaScript y TypeScript (npm y Expo), Python (PyPI), Go, Rust (Cargo), Dart o Flutter (Pub), Kotlin y Java (Gradle y Maven), C# (NuGet), Ruby (RubyGems) y Swift (SwiftPM).
 
 ## Qué muestra
 
@@ -97,18 +97,25 @@ Algunos detalles:
 
 ## Comandos
 
-- `/upgrades`: abre el panel y vuelve a revisar. Es la forma de abrirlo de nuevo si lo cierras.
+Como `/narsil <opción>` en Narsil, cada revisión es un argumento de `/narsil-check`:
 
-El panel se abre solo al empezar una sesión cuando hay librerías para actualizar. Si todo está al día, no se abre: usa `/upgrades`.
+- `/narsil-check upgrade`: abre el panel con la sección **Actualizaciones** desplegada y vuelve a revisar. Es la forma de abrirlo de nuevo si lo cierras.
+- `/narsil-check` sin argumento, o con uno que no conoce, responde con la lista de revisiones.
+
+El panel se abre solo al empezar una sesión cuando hay librerías para actualizar. Si todo está al día, no se abre: usa `/narsil-check upgrade`.
+
+## El panel
+
+El panel usa los colores y la forma de Narsil: arriba, **● Narsil Check**; debajo, cada revisión como una sección que se pliega y despliega con su cabecera (`▾ Actualizaciones · 3` / `▸ Actualizaciones · 3`). El punto de color de la sección dice lo más urgente que tiene: rojo si hay algo bloqueado, amarillo si hay versiones mayores, verde si solo quedan triviales o todo está al día, y azul para Expo. La sección se queda plegada o desplegada como la dejaste, también en las siguientes sesiones.
 
 ## Instalación
 
 ```bash
-claude plugin marketplace add davshn/upgrade-mod
+claude plugin marketplace add davshn/narsil-check
 ```
 
 ```bash
-claude plugin install upgrade-mod@upgrade-mod
+claude plugin install narsil-check@narsil-check
 ```
 
 ## Desarrollo

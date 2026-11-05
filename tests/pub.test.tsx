@@ -7,10 +7,10 @@ import { PUB, isFlutter, parsePub, pubSpecFor, rewritePub } from '../hooks/pub'
 declare function setTimeout(fn: () => void, ms: number): unknown
 
 const PANE = {
-  plugin: 'upgrade-mod',
+  plugin: 'narsil-check',
   component: 'Pane',
-  requestId: 'upgrades',
-  props: { title: 'Actualizaciones', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
+  requestId: 'narsil-check',
+  props: { title: 'Narsil Check', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
 } as const
 
 const PUBSPEC = `name: demo

@@ -1,6 +1,13 @@
 {
-  "name": "upgrade-mod",
-  "description": "A side pane that lists which libraries of the project can be upgraded",
-  "owner": { "name": "Davshn" },
-  "plugins": [{ "name": "upgrade-mod", "source": "./" }]
+  "name": "narsil-check",
+  "description": "Narsil Check, a companion mod to Narsil that checks the project",
+  "owner": {
+    "name": "Davshn"
+  },
+  "plugins": [
+    {
+      "name": "narsil-check",
+      "source": "./"
+    }
+  ]
 }

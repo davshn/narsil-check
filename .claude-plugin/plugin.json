@@ -1,7 +1,10 @@
 {
-  "name": "upgrade-mod",
-  "version": "0.12.0",
-  "description": "A side pane that opens with the project and lists which libraries can be upgraded, and how hard each upgrade is",
-  "author": { "name": "Davshn" },
+  "name": "narsil-check",
+  "version": "0.13.0",
+  "description": "Narsil Check: a side pane in Narsil's colors that checks the project, starting with which libraries can be upgraded and how hard each upgrade is",
+  "author": {
+    "name": "Davshn"
+  },
+  "repository": "https://github.com/davshn/narsil-check",
   "types": "./types/index.d.ts"
 }

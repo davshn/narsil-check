@@ -126,7 +126,7 @@ export const CARGO: Adapter = {
   parse: parseCargo,
   latestUrl: name => `https://crates.io/api/v1/crates/${encodeURIComponent(name)}`,
   // crates.io refuses a request with no User-Agent.
-  headers: { accept: 'application/json', 'user-agent': 'upgrade-mod (https://github.com/davshn/upgrade-mod)' },
+  headers: { accept: 'application/json', 'user-agent': 'narsil-check (https://github.com/davshn/narsil-check)' },
   latestOf: text => {
     const crate = (JSON.parse(text) as { crate?: { max_stable_version?: unknown; max_version?: unknown } }).crate
     const version = crate?.max_stable_version ?? crate?.max_version

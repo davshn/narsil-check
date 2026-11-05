@@ -21,11 +21,11 @@ const v = (text: string): Version => {
 }
 
 const PANE = {
-  plugin: 'upgrade-mod',
+  plugin: 'narsil-check',
   component: 'Pane',
-  requestId: 'upgrades',
+  requestId: 'narsil-check',
   props: {
-    title: 'Actualizaciones',
+    title: 'Narsil Check',
     isFocused: false,
     bodyColumns: 50,
     placement: 'dock',
@@ -265,7 +265,7 @@ test('opening a project with upgrades opens the pane and lists them, on every su
   await scanned($)
   await until(() => opened.length > 0)
 
-  expect(opened).toEqual(['upgrades'])
+  expect(opened).toEqual(['narsil-check'])
 
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
@@ -293,9 +293,9 @@ test('the pane does not open by itself when everything is current, and /upgrades
   expect((await ui.find({ type: 'Text', text: /al día/ }))?.text).toBe('Todo al día · 4 librerías revisadas')
   await ui.unmount()
 
-  await $.command.run({ command: 'upgrades', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  await $.command.run({ command: 'narsil-check', args: 'upgrade', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
   await scanned($)
-  expect(opened).toEqual(['upgrades'])
+  expect(opened).toEqual(['narsil-check'])
 })
 
 test('the pane does not open where there is no package.json', async ($, on) => {
@@ -312,7 +312,7 @@ test('a scan an earlier version stored is declined', async ($, on) => {
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-  expect((await ui.find({ type: 'Text' }))?.text).toBe('Buscando actualizaciones…')
+  expect((await ui.find({ type: 'Text', text: /Buscando/ }))?.text).toBe('Buscando actualizaciones…')
   await ui.unmount()
 })
 

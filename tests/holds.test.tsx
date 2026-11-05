@@ -8,10 +8,10 @@ import { isKotlin, kotlinConflicts, parseMaven } from '../hooks/maven'
 declare function setTimeout(fn: () => void, ms: number): unknown
 
 const PANE = {
-  plugin: 'upgrade-mod',
+  plugin: 'narsil-check',
   component: 'Pane',
-  requestId: 'upgrades',
-  props: { title: 'Actualizaciones', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
+  requestId: 'narsil-check',
+  props: { title: 'Narsil Check', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
 } as const
 
 // Shaped after mobileTemplate: Kotlin shared by its plugins, SKIE in the

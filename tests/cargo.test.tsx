@@ -8,10 +8,10 @@ import { parseToml } from '../hooks/toml'
 declare function setTimeout(fn: () => void, ms: number): unknown
 
 const PANE = {
-  plugin: 'upgrade-mod',
+  plugin: 'narsil-check',
   component: 'Pane',
-  requestId: 'upgrades',
-  props: { title: 'Actualizaciones', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
+  requestId: 'narsil-check',
+  props: { title: 'Narsil Check', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
 } as const
 
 const CARGO_TOML = `[package]
@@ -136,7 +136,7 @@ test("crates.io's answer gives the latest stable release and the repository", ()
   expect(CARGO.latestOf(text)).toBe('1.0.229')
   expect(CARGO.repoUrlOf(text)).toBe('https://github.com/serde-rs/serde')
   expect(CARGO.latestUrl('serde_json')).toBe('https://crates.io/api/v1/crates/serde_json')
-  expect(CARGO.headers?.['user-agent']).toContain('upgrade-mod')
+  expect(CARGO.headers?.['user-agent']).toContain('narsil-check')
   expect(CARGO.importPattern('serde-json')).toBe('(extern crate[[:space:]]+serde_json|(^|[^[:alnum:]_])serde_json::)')
 })
 
