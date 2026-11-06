@@ -257,8 +257,8 @@ test('a Gradle project shows a shared version as one row and the button raises t
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('3 para actualizar de 11 · 1 mayores · 2 triviales')
-  expect((await ui.find({ type: 'Text', text: /^ktor/ }))?.text).toBe('ktor (2) 3.6.1 → 3.7.0')
-  expect((await ui.find({ type: 'Text', text: /^io.mockk/ }))?.text).toBe('io.mockk:mockk 1.13.10 → 1.13.17 · dev')
+  expect((await ui.find({ type: 'Button', text: /^ktor/ }))?.text).toBe('ktor (2) 3.6.1 → 3.7.0')
+  expect((await ui.find({ type: 'Button', text: /^io.mockk/ }))?.text).toBe('io.mockk:mockk 1.13.10 → 1.13.17 · dev')
 
   await ui.press({ key: 'upgrade-bumps' })
   expect(files['gradle/libs.versions.toml']).toContain('ktor = "3.7.0"')

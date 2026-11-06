@@ -201,10 +201,10 @@ test('a Rust project lists its crates and the button raises Cargo.toml and updat
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('4 para actualizar de 6 · 1 mayores · 3 triviales')
-  expect((await ui.find({ type: 'Text', text: /^tokio/ }))?.text).toBe('tokio 1.30.0 → 1.48.0')
+  expect((await ui.find({ type: 'Button', text: /^tokio/ }))?.text).toBe('tokio 1.30.0 → 1.48.0')
   // Below 1.0 a minor breaks: rand 0.8 -> 0.9 is a major.
-  expect((await ui.find({ type: 'Text', text: /^rand/ }))?.text).toBe('rand 0.8.5 → 0.9.2')
-  expect((await ui.find({ type: 'Text', text: /^insta/ }))?.text).toBe('insta 1.34.0 → 1.40.1 · dev')
+  expect((await ui.find({ type: 'Button', text: /^rand/ }))?.text).toBe('rand 0.8.5 → 0.9.2')
+  expect((await ui.find({ type: 'Button', text: /^insta/ }))?.text).toBe('insta 1.34.0 → 1.40.1 · dev')
 
   await ui.press({ key: 'upgrade-bumps' })
   expect(ran.filter(argv => argv[0] === 'cargo')).toEqual([['cargo', 'update', '-p', 'serde', '-p', 'tokio', '-p', 'insta']])

@@ -140,7 +140,7 @@ test("in mobileTemplate's shape Kotlin's patch is blocked by SKIE and the button
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /^Bloqueada/ }))?.text).toBe('Bloqueada (1)')
+  expect((await ui.find({ type: 'Button', text: /Bloqueada/ }))?.text).toBe('▾ Bloqueada (1)')
   expect((await ui.find({ type: 'Text', text: /SKIE/ }))?.text).toBe(
     '  SKIE 0.10.16 es un plugin del compilador de Kotlin: confirma que soporta Kotlin 2.4.21 · Mokkery 3.6.0 es un plugin del compilador de Kotlin: confirma que soporta Kotlin 2.4.21',
   )
@@ -159,6 +159,6 @@ test('a version kept by a comment is blocked with that comment', async ($, on) =
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /Fijada/ }))?.text).toBe('  Fijada a propósito: «keep: 1.11.1 breaks the iOS test runner»')
-  expect(await ui.find({ type: 'Button', text: /Actualizar/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Button', text: /^Actualizar (las|esta)/ })).toBeUndefined()
   await ui.unmount()
 })

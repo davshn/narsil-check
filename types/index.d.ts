@@ -56,6 +56,9 @@ export type Pending = {
 
 // Turning the pending changes into a commit and a push, and from the default
 // branch also a new branch and a PR (`url`).
+// "Actualizar rama": a git pull of the checked-out branch, and how it ended.
+export type Pull = { status: 'idle' } | { status: 'running' } | { status: 'done'; text: string } | { status: 'failed'; message: string }
+
 export type Pr =
   | { status: 'idle' }
   | { status: 'running'; step: string }
@@ -129,6 +132,11 @@ declare module 'claude-code' {
       todos: Shaped<Todos>
       isTodosOpen: Shaped<boolean>
       openTodos: Shaped<string[]>
+      // The upgrade groups and vulnerability severities folded shut, by key
+      // (`upgrade-blocked`, `vulns-high`): every one starts open.
+      closedGroups: Shaped<string[]>
+      // How the last "Actualizar rama" went.
+      pull: Shaped<Pull>
     }
   }
 }

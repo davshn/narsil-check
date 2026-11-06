@@ -3,6 +3,7 @@
 
 import type { Audit, Explained, Finding, Group, Job, Pr, Scan, Severity, Upgrade } from '../types'
 import { SEVERITIES, SEVERITY_TITLE, worstOf } from './osv'
+import type { Art } from './narsil-art'
 
 export const PANE = 'narsil-check'
 export const TITLE = 'Narsil Check'
@@ -73,6 +74,34 @@ export function auditSummary(findings: Finding[], checked: number): string {
 }
 
 // The section's toggle: its arrow, its name and, once scanned, its count.
+// Baby Narsil standing, as one SVG holding both pictures: the light one, and
+// the dark one shown only under a dark color scheme, so the picture follows
+// the app's theme with no word from the engine.
+export function narsilSvg(light: Art, dark: Art, height = 96): string {
+  const box = { width: Math.max(light.width, dark.width), height: Math.max(light.height, dark.height) }
+  const image = (art: Art, theme: string) =>
+    `<image class="${theme}" href="${art.src}" x="${(box.width - art.width) / 2}" y="${box.height - art.height}" width="${art.width}" height="${art.height}"/>`
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${box.width} ${box.height}" width="${Math.round((box.width * height) / box.height)}" height="${height}">` +
+    `<style>.oscuro{display:none}@media (prefers-color-scheme: dark){.claro{display:none}.oscuro{display:inline}}</style>` +
+    image(light, 'claro') +
+    image(dark, 'oscuro') +
+    `</svg>`
+  )
+}
+
+// A library's row as it reads, which names its button: the jump, then what
+// else is known of it.
+export function upgradeLine(u: Upgrade, ecosystem: string | undefined, fixes: number): string {
+  const fixed = fixes > 0 ? ` · corrige ${fixes === 1 ? '1 vulnerabilidad' : `${fixes} vulnerabilidades`}` : ''
+  return `${u.display ?? u.name} ${u.current} → ${u.latest}${u.isDev ? ' · dev' : ''}${ecosystem ? ` · ${ecosystem}` : ''}${fixed}`
+}
+
+// A group's toggle inside a section: an upgrade group or a severity, with its count.
+export function groupLabel(isOpen: boolean, label: string, count: number): string {
+  return `${isOpen ? '▾' : '▸'} ${label} (${count})`
+}
+
 export function sectionLabel(isOpen: boolean, scan: Scan): string {
   const count = scan.status === 'done' && scan.upgrades.length > 0 ? ` · ${scan.upgrades.length}` : ''
   return `${isOpen ? '▾' : '▸'} Actualizaciones${count}`
@@ -168,6 +197,14 @@ export function prNote(pr: Pr): { text: string; color: string } | undefined {
 }
 
 // The last lines of a command's output: where its error usually is.
+// What a successful git pull did, in a few words: up to date, a fast-forward,
+// or its last line.
+export function pullSummary(stdout: string): string {
+  if (/Already up.to.date/i.test(stdout)) return 'ya estaba al día'
+  if (/Fast-forward/.test(stdout)) return 'Fast-forward'
+  return tail(stdout, 1) || 'hecho'
+}
+
 export function tail(text: string, lines = 4): string {
   return text.trim().split(/\r?\n/).slice(-lines).join(' ').slice(0, 400)
 }

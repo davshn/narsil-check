@@ -24,9 +24,13 @@ Es un mod de Claude Code de **código abierto**, publicado bajo la licencia [GPL
 ## Funcionalidades
 
 ### El panel
-El panel se abre al empezar cada sesión, aunque no haya nada que revisar. Arriba dice **● Narsil Check** y debajo tiene cada revisión como una sección que se pliega y se despliega con su cabecera (`▾ Actualizaciones · 3` / `▸ Actualizaciones · 3`). El punto de color de cada sección dice lo más urgente que tiene, con la paleta de Narsil: rojo si algo bloquea o falla, amarillo si algo te espera, verde si está al día y azul para lo informativo.
+El panel se abre al empezar cada sesión, aunque no haya nada que revisar. Arriba dice **● Narsil Check**, con Narsil bebé debajo (en su versión clara u oscura, según el tema de la app; la terminal no dibuja imágenes), y después cada revisión como una sección que se pliega y se despliega con su cabecera (`▾ Actualizaciones · 3` / `▸ Actualizaciones · 3`). El punto de color de cada sección dice lo más urgente que tiene, con la paleta de Narsil: rojo si algo bloquea o falla, amarillo si algo te espera, verde si está al día y azul para lo informativo.
 
 Cada sesión empieza igual: **Entorno** desplegado, **Conectores** plegado, y **Actualizaciones**, **Vulnerabilidades** y **Pendientes** plegadas hasta que tienen algo, momento en que se despliegan solas.
+
+Dentro de **Actualizaciones** y **Vulnerabilidades**, cada grupo (**Bloqueada**, **Versión mayor**, **Crítica**, **Alta**...) también se pliega con su propia cabecera (`▾ Bloqueada (2)` / `▸ Bloqueada (2)`), y el panel recuerda cuáles cerraste. Un clic en una librería o en una vulnerabilidad la copia al portapapeles: la librería con su salto y lo que la bloquea o la razón de Haiku, y la vulnerabilidad con su gravedad, el arreglo y el enlace a OSV.
+
+Al final del panel, **Actualizar rama** hace `git pull --ff-only` en la rama en la que estás. Solo avanza si la rama no se ha separado de la remota; si se separó, no toca nada y dice por qué. Lo ejecuta el mod directamente, sin pasar por los permisos de la app, y después vuelve a revisar las librerías.
 
 ### Entorno
 Lo que enseña la barra de sesión de la app de escritorio, para que puedas ocultarla:
@@ -87,7 +91,7 @@ Debajo de cada librería con versión mayor, el panel muestra la dificultad (baj
 - **Las notas de las versiones que rompen**: el release de GitHub de cada nueva versión mayor (hasta tres), buscado como `v19.0.0`, `@scope/nombre@19.0.0` o `19.0.0`. Si no hay release, se usa el `CHANGELOG.md` del paquete desde la versión instalada.
 - **Cómo usa tu proyecto la librería**: los archivos y las líneas que la importan, sacados con `git grep`.
 
-Se le pide que se base solo en eso y que no invente cambios. La razón de cada salto (por ejemplo, `react 18.2.0 → 19.2.0`) se pide una vez y se guarda; no se vuelve a pedir en otras sesiones. Los grupos **Versión mayor** y **Bloqueada** tienen cada uno un botón **Copiar con razones**, que copia solo las librerías de su grupo: las mayores con su dificultad y su razón, y las bloqueadas con lo que las bloquea.
+Se le pide que se base solo en eso y que no invente cambios. La razón de cada salto (por ejemplo, `react 18.2.0 → 19.2.0`) se pide una vez y se guarda; no se vuelve a pedir en otras sesiones. Un clic en una versión mayor la copia con su dificultad y su razón, y uno en una bloqueada, con lo que la bloquea.
 
 La API de GitHub sin sesión permite 60 consultas por hora. Si se agotan, el análisis usa el `CHANGELOG.md` o dice que no encontró notas.
 
@@ -111,7 +115,7 @@ La sección **Vulnerabilidades** lista las vulnerabilidades conocidas de los paq
 - **Qué se revisa**: todo el árbol instalado donde hay un lockfile que lo dice (`package-lock.json`, `Cargo.lock`, `uv.lock` o `poetry.lock`, `Gemfile.lock`, `pubspec.lock`, `Package.resolved` y los `require` de `go.mod`, también los indirectos); en Maven y NuGet, las dependencias declaradas. Un paquete que no declaras tú lleva la marca *indirecta*.
 - **Gravedad**: la del propio aviso (Crítica, Alta, Moderada, Baja) y, si no la trae, la que da la nota de su vector CVSS v3. Sin ninguna de las dos, *Sin clasificar*. Un mismo problema con dos identificadores (GHSA y PYSEC) cuenta una vez.
 - **Cada aviso** muestra el paquete y su versión, su identificador, el resumen y la primera versión que lo corrige.
-- **Copiar**: cada grupo de gravedad tiene su botón **Copiar**, que pone en el portapapeles los avisos de ese nivel con el arreglo y el enlace a OSV.
+- **Copiar**: un clic en un aviso lo pone en el portapapeles con su gravedad, el arreglo y el enlace a OSV.
 - **Con Actualizaciones**: si la actualización que ofrece el panel corrige vulnerabilidades, la fila lo dice en rojo (`lodash 4.17.20 → 4.17.21 · corrige 2 vulnerabilidades`) y sube al principio de su grupo.
 - **Cuándo**: después de cada revisión de actualizaciones (al abrir la sesión, con el botón o con el comando), con su propio botón **Consultar de nuevo** y con `/narsil-check vulns`. Los detalles de cada aviso se guardan y solo se piden de nuevo cuando OSV dice que cambiaron.
 
@@ -237,6 +241,7 @@ claude plugin test .
 - `hooks/explain.ts`: el análisis de Haiku de cada versión mayor.
 - `hooks/osv.ts`: las vulnerabilidades de OSV.dev.
 - `hooks/git.ts`: la rama, el commit y el PR.
+- `hooks/narsil-art.ts`: el dibujo de Narsil bebé, claro y oscuro, generado a partir del arte de [Narsil](https://github.com/davshn/narsil-pet).
 - `tests/`: los tests.
 
 ## Licencia

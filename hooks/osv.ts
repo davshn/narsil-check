@@ -183,18 +183,13 @@ export const SEVERITY_TITLE: Record<Severity, string> = {
   unknown: 'Sin clasificar',
 }
 
-// What a severity's copy button puts on the clipboard, ready to paste into
-// an issue or a prompt.
-export function copyVulnsText(findings: Finding[], severity: Severity): string {
-  const rows = bySeverity(findings, severity)
-  return [
-    `Vulnerabilidades de gravedad ${SEVERITY_TITLE[severity].toLowerCase()}:`,
-    ...rows.map(({ finding, vuln }) => {
-      const where = `${finding.display ?? finding.name} ${finding.version}${finding.isDirect ? '' : ' (indirecta)'}`
-      const fix = vuln.fixed ? ` Se corrige en ${vuln.fixed}.` : ' Sin versión que la corrija.'
-      return `- ${where} · ${vuln.id}: ${vuln.summary}.${fix} ${vulnUrl(vuln.id)}`
-    }),
-  ].join('\n')
+// What a press on a vulnerability puts on the clipboard: the package, the
+// advisory and its gravity, the fix and the link, ready to paste into an issue
+// or a prompt.
+export function vulnCopyText(finding: Finding, vuln: Vuln): string {
+  const where = `${finding.display ?? finding.name} ${finding.version}${finding.isDirect ? '' : ' (indirecta)'}`
+  const fix = vuln.fixed ? ` Se corrige en ${vuln.fixed}.` : ' Sin versión que la corrija.'
+  return `${where} · ${vuln.id} (${SEVERITY_TITLE[vuln.severity].toLowerCase()}): ${vuln.summary}.${fix} ${vulnUrl(vuln.id)}`
 }
 
 // How many of a package's vulnerabilities its upgrade to `latest` fixes.

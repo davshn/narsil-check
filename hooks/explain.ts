@@ -101,24 +101,10 @@ export function parseReason(text: string): Reason | undefined {
   return { difficulty: difficulty as Difficulty, text: reason.replace(/\s+/g, ' ').slice(0, 400) }
 }
 
-// What the copy button puts on the clipboard: each blocked upgrade with what
-// blocks it, and each major with its reason, ready to paste into an issue or
-// a prompt.
-export function copyText(rows: Upgrade[], reasons: Record<string, Reason | undefined>): string {
-  const blocked = rows.filter(u => u.group === 'blocked')
-  const majors = rows.filter(u => u.group === 'review')
-  const lines: string[] = []
-  if (blocked.length > 0) {
-    lines.push('Librerías bloqueadas:')
-    for (const u of blocked) lines.push(`- ${u.display ?? u.name} ${u.current} → ${u.latest}: ${u.conflicts.join('; ')}`)
-  }
-  if (majors.length > 0) {
-    if (lines.length > 0) lines.push('')
-    lines.push('Librerías con versión mayor pendiente:')
-    for (const u of majors) {
-      const r = reasons[reasonKey(u)]
-      lines.push(`- ${u.display ?? u.name} ${u.current} → ${u.latest}${r ? ` (dificultad ${r.difficulty}): ${r.text}` : ''}`)
-    }
-  }
-  return lines.join('\n')
+// What a press on a library puts on the clipboard: its jump, with what blocks
+// it or the reason Haiku gave, ready to paste into an issue or a prompt.
+export function upgradeCopyText(u: Upgrade, reason?: Reason): string {
+  const jump = `${u.display ?? u.name} ${u.current} → ${u.latest}${u.isDev ? ' (dev)' : ''}`
+  if (u.group === 'blocked' && u.conflicts.length > 0) return `${jump}: ${u.conflicts.join('; ')}`
+  return reason ? `${jump} (dificultad ${reason.difficulty}): ${reason.text}` : jump
 }

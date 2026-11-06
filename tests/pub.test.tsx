@@ -165,7 +165,7 @@ test('a Flutter app lists its packages and the button raises pubspec.yaml and ru
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('4 para actualizar de 4 · 2 mayores · 2 triviales')
   // Below 1.0 a minor breaks: intl 0.18 -> 0.20 is a major.
-  expect((await ui.find({ type: 'Text', text: /^intl/ }))?.text).toBe('intl 0.18.1 → 0.20.2')
+  expect((await ui.find({ type: 'Button', text: /^intl/ }))?.text).toBe('intl 0.18.1 → 0.20.2')
 
   await ui.press({ key: 'upgrade-bumps' })
   expect(ran.filter(argv => argv[0] === 'flutter')).toEqual([['flutter', 'pub', 'get']])

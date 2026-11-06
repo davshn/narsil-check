@@ -141,7 +141,7 @@ test('a .NET project found under src/ lists its packages and the button raises t
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('3 para actualizar de 4 · 1 mayores · 2 triviales')
-  expect((await ui.find({ type: 'Text', text: /^Serilog/ }))?.text).toBe('Serilog 3.0.0 → 4.4.0')
+  expect((await ui.find({ type: 'Button', text: /^Serilog/ }))?.text).toBe('Serilog 3.0.0 → 4.4.0')
 
   await ui.press({ key: 'upgrade-bumps' })
   expect(ran.filter(argv => argv[0] === 'dotnet')).toEqual([['dotnet', 'restore']])

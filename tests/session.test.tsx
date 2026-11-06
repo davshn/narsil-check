@@ -291,3 +291,29 @@ test("a turn that used one of the app's session tools reads the app's servers ag
   for (let i = 0; i < 50 && calls.filter(c => c.tool === 'get_session').length < 2; i++) await new Promise<void>(resolve => setTimeout(() => resolve(), 5))
   expect(calls.filter(c => c.tool === 'get_session').length).toBe(2)
 })
+
+test('"Actualizar rama", last in the pane, pulls the checked-out branch and says how it went', async ($, on) => {
+  const git: Record<string, string> = { 'git pull --ff-only': 'Updating 1a2b3c4..5d6e7f8\nFast-forward\n README.md | 2 +-\n' }
+  app(on, { state: 'off' }, 0, git)
+  await opened($, on)
+
+  let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const buttons = (await ui.findAll({ type: 'Button' })).map(b => b.key)
+  expect(buttons.at(-1)).toBe('branch-pull')
+  await ui.press({ key: 'branch-pull' })
+  await ui.unmount()
+  ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /Rama feat\/login/ }))?.text).toBe('Rama feat/login actualizada: Fast-forward')
+  await ui.unmount()
+})
+
+test('a pull that cannot fast-forward says why and changes nothing else', async ($, on) => {
+  app(on, { state: 'off' }, 0)
+  await opened($, on)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'branch-pull' })
+  await ui.unmount()
+  const again = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await again.find({ type: 'Text', text: /^No pude actualizar/ }))?.text).toMatch(/^No pude actualizar la rama: /)
+  await again.unmount()
+})

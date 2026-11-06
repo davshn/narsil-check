@@ -217,9 +217,9 @@ test('a Swift package reads tags with git ls-remote and the button raises Packag
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('4 para actualizar de 6 · 1 mayores · 3 triviales')
-  expect((await ui.find({ type: 'Text', text: /^swift-argument-parser/ }))?.text).toBe('swift-argument-parser 1.3.0 → 1.8.2')
+  expect((await ui.find({ type: 'Button', text: /^swift-argument-parser/ }))?.text).toBe('swift-argument-parser 1.3.0 → 1.8.2')
   // An exact pin with a newer release is still listed: raising it is the upgrade.
-  expect((await ui.find({ type: 'Text', text: /^Alamofire/ }))?.text).toBe('Alamofire 5.8.1 → 5.12.2')
+  expect((await ui.find({ type: 'Button', text: /^Alamofire/ }))?.text).toBe('Alamofire 5.8.1 → 5.12.2')
   expect(ran.filter(argv => argv[1] === 'ls-remote').length).toBe(6)
 
   await ui.press({ key: 'upgrade-bumps' })

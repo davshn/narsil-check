@@ -3,7 +3,7 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { NPM } from '../hooks/ecosystems'
-import { batchBody, batchIds, copyVulnsText, cvss3Score, fixedBy, fixedFor, mergeVulns, osvName, severityOf, vulnOf } from '../hooks/osv'
+import { batchBody, batchIds, cvss3Score, fixedBy, fixedFor, mergeVulns, osvName, severityOf, vulnCopyText, vulnOf } from '../hooks/osv'
 import type { Package } from '../hooks/osv'
 import { auditSummary, vulnsColor, vulnsLabel } from '../hooks/words'
 import type { Finding } from '../types'
@@ -102,13 +102,12 @@ const findings: Finding[] = [
   { name: 'qs', ecosystem: 'npm', version: '6.7.0', isDirect: false, vulns: [{ id: 'GHSA-hrpp-h998-j3pp', aliases: [], summary: 'Prototype pollution in qs', severity: 'high' }] },
 ]
 
-test('each severity copies its own list, with the fix and the link', () => {
-  expect(copyVulnsText(findings, 'high')).toBe(
-    [
-      'Vulnerabilidades de gravedad alta:',
-      '- lodash 4.17.20 · GHSA-35jh-r3h4-6jhm: Command Injection in lodash. Se corrige en 4.17.21. https://osv.dev/vulnerability/GHSA-35jh-r3h4-6jhm',
-      '- qs 6.7.0 (indirecta) · GHSA-hrpp-h998-j3pp: Prototype pollution in qs. Sin versión que la corrija. https://osv.dev/vulnerability/GHSA-hrpp-h998-j3pp',
-    ].join('\n'),
+test('a vulnerability copies with its gravity, the fix and the link', () => {
+  expect(vulnCopyText(findings[0]!, findings[0]!.vulns.find(v => v.severity === 'high')!)).toBe(
+    'lodash 4.17.20 · GHSA-35jh-r3h4-6jhm (alta): Command Injection in lodash. Se corrige en 4.17.21. https://osv.dev/vulnerability/GHSA-35jh-r3h4-6jhm',
+  )
+  expect(vulnCopyText(findings[1]!, findings[1]!.vulns[0]!)).toBe(
+    'qs 6.7.0 (indirecta) · GHSA-hrpp-h998-j3pp (alta): Prototype pollution in qs. Sin versión que la corrija. https://osv.dev/vulnerability/GHSA-hrpp-h998-j3pp',
   )
   expect(fixedBy(findings[0], '4.17.21')).toBe(2)
   expect(fixedBy(findings[0], '4.17.20')).toBe(0)
@@ -190,7 +189,7 @@ async function settled($: Engine) {
   }
 }
 
-test('the vulnerabilities section lists findings by severity, copies each, and marks the upgrade that fixes them', async ($, on) => {
+test('the vulnerabilities section lists findings in folding severity groups, copies one on a press, and marks the upgrade that fixes them', async ($, on) => {
   const { asked } = project(on)
   const copied: string[] = []
   on('ui.copy', (_, e) => {
@@ -206,15 +205,23 @@ test('the vulnerabilities section lists findings by severity, copies each, and m
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Button', text: /Vulnerabilidades/ }))?.text).toBe('▾ Vulnerabilidades · 3')
   expect((await ui.find({ type: 'Text', text: /vulnerabilidades en/ }))?.text).toBe('3 vulnerabilidades en 2 de 3 paquetes · 2 altas · 1 moderada')
-  expect((await ui.find({ type: 'Text', text: /^Alta/ }))?.text).toBe('Alta (2)')
-  expect((await ui.find({ type: 'Text', text: /^qs/ }))?.text).toBe('qs 6.7.0 · indirecta · GHSA-hrpp-h998-j3pp')
+  expect((await ui.find({ type: 'Button', text: /Alta/ }))?.text).toBe('▾ Alta (2)')
+  expect((await ui.find({ type: 'Button', text: /^qs/ }))?.text).toBe('qs 6.7.0 · indirecta · GHSA-hrpp-h998-j3pp')
+  expect(await ui.find({ type: 'Button', text: /Copiar/ })).toBeUndefined()
   // The upgrade to lodash 4.17.21 fixes both of its vulnerabilities.
-  expect((await ui.find({ type: 'Text', text: /^lodash 4\.17\.20 → / }))?.text).toBe('lodash 4.17.20 → 4.17.21 · corrige 2 vulnerabilidades')
+  expect((await ui.find({ type: 'Button', text: /^lodash 4\.17\.20 → / }))?.text).toBe('lodash 4.17.20 → 4.17.21 · corrige 2 vulnerabilidades')
 
-  await ui.press({ key: 'copy-vulns-moderate' })
+  await ui.press({ key: 'vuln-npm:lodash@4.17.20:GHSA-29mw-wpgm-hmr9' })
   expect(copied).toEqual([
-    'Vulnerabilidades de gravedad moderada:\n- lodash 4.17.20 · GHSA-29mw-wpgm-hmr9: Regular Expression Denial of Service (ReDoS) in lodash. Se corrige en 4.17.21. https://osv.dev/vulnerability/GHSA-29mw-wpgm-hmr9',
+    'lodash 4.17.20 · GHSA-29mw-wpgm-hmr9 (moderada): Regular Expression Denial of Service (ReDoS) in lodash. Se corrige en 4.17.21. https://osv.dev/vulnerability/GHSA-29mw-wpgm-hmr9',
   ])
+
+  // A severity folds by itself.
+  await ui.press({ key: 'group-vulns-high' })
+  expect((await ui.find({ type: 'Button', text: /Alta/ }))?.text).toBe('▸ Alta (2)')
+  expect(await ui.find({ type: 'Button', text: /^qs/ })).toBeUndefined()
+  expect((await ui.find({ type: 'Button', text: /Moderada/ }))?.text).toBe('▾ Moderada (1)')
+  await ui.press({ key: 'group-vulns-high' })
 
   await ui.press({ key: 'section-vulns' })
   expect((await ui.find({ type: 'Button', text: /Vulnerabilidades/ }))?.text).toBe('▸ Vulnerabilidades · 3')

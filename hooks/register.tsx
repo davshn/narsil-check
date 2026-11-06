@@ -1,8 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Audit, Explained, Finding, Group, Job, Pending, Pr, Scan, Severity, Upgrade } from '../types'
-import { BATCH_SIZE, OSV_BATCH, OSV_VULN, SEVERITIES, SEVERITY_TITLE, batchBody, batchIds, bySeverity, copyVulnsText, fixedBy, mergeVulns, vulnOf, worstOf } from './osv'
+import type { Audit, Explained, Finding, Group, Job, Pending, Pr, Pull, Scan, Severity, Upgrade } from '../types'
+import { BATCH_SIZE, OSV_BATCH, OSV_VULN, SEVERITIES, SEVERITY_TITLE, batchBody, batchIds, bySeverity, fixedBy, mergeVulns, vulnCopyText, vulnOf, worstOf } from './osv'
 import type { Package } from './osv'
 import {
   NOTES_PER_RELEASE,
@@ -12,13 +12,13 @@ import {
   changelogSince,
   changelogUrl,
   clip,
-  copyText,
   parseReason,
   prompt,
   reasonKey,
   releaseTags,
   releaseUrl,
   repoOf,
+  upgradeCopyText,
 } from './explain'
 import type { Reason } from './explain'
 import { ADAPTERS, NPM, adapterOf, holdNote, manifestOf, manifestsOf, specChanges } from './ecosystems'
@@ -56,7 +56,8 @@ import {
 } from './session'
 import type { Remote, SessionView, Task, Todos } from '../types'
 import { TODO_FILE, TOOL_ADD, TOOL_DONE, TOOL_LIST, TOOL_TEMPLATE, damagedPath, findTask, newTask, parseEntry, parseTodoFile, serializeTodos, templateArg, templateMatches, templatePrompt, todosColor, todosLabel, todosText, withExclude } from './todos'
-import { COMMAND, COMMAND_HELP, GROUPS, PALETTE, PANE, TITLE, agoLabel, auditSummary, commandHelp, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, reasonLine, sortUpgrades, summaryOf, tail } from './words'
+import { COMMAND, COMMAND_HELP, GROUPS, PALETTE, PANE, TITLE, agoLabel, auditSummary, commandHelp, groupLabel, narsilSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, sortUpgrades, summaryOf, tail } from './words'
+import { PARADA_CLARO, PARADA_OSCURO } from './narsil-art'
 
 // Change a tag when its type's fields change: it declines what an earlier
 // version stored, which outlives a reload.
@@ -68,6 +69,9 @@ const pr = atom({ plugin: 'narsil-check', key: 'pr' } as const, { status: 'idle'
 const reasons = atom({ plugin: 'narsil-check', key: 'reasons' } as const, {} as Record<string, Explained>, { shape: 'reasons-1' })
 const audit = atom({ plugin: 'narsil-check', key: 'audit' } as const, { status: 'idle' } as Audit, { shape: 'audit-1' })
 // Whether the vulnerabilities section is open; kept in the store too.
+// The groups folded shut, and the last pull of the branch.
+const closedGroups = atom({ plugin: 'narsil-check', key: 'closedGroups' } as const, [] as string[], { shape: 'closed-1' })
+const pull = atom({ plugin: 'narsil-check', key: 'pull' } as const, { status: 'idle' } as Pull, { shape: 'pull-1' })
 const isVulnsOpen = atom({ plugin: 'narsil-check', key: 'isVulnsOpen' } as const, false, { shape: 'open-1' })
 const OSV_CONCURRENCY = 8
 const OSV_MS = 30_000
@@ -279,16 +283,17 @@ async function explainMajors($: EngineInterface, upgrades: Upgrade[]): Promise<v
   })
 }
 
-// Puts the major upgrades and their reasons on the clipboard of the surface
-// the press came from.
-async function copyGroup($: EngineInterface, group: Group, surface: Parameters<EngineInterface['ui']['copy']>[0]['surface']): Promise<void> {
-  const state = await read($, scan)
-  if (state.status !== 'done') return
-  const known = await read($, reasons)
-  const done: Record<string, Reason | undefined> = {}
-  for (const [key, value] of Object.entries(known)) if (value.status === 'done') done[key] = value
-  const copied = await $.ui.copy({ text: copyText(state.upgrades.filter(u => u.group === group), done), surface })
-  $.ui.toast(copied.isCopied ? 'Copié las librerías con sus razones.' : `No pude copiar: ${copied.reason}`)
+type Surface = Parameters<EngineInterface['ui']['copy']>[0]['surface']
+
+// Puts one row of the pane on the clipboard of the surface the press came from.
+async function copyRow($: EngineInterface, text: string, surface: Surface): Promise<void> {
+  const copied = await $.ui.copy({ text, surface })
+  $.ui.toast(copied.isCopied ? 'Copiado al portapapeles.' : `No pude copiar: ${copied.reason}`)
+}
+
+// Folds or unfolds one upgrade group or vulnerability severity.
+function toggleGroup($: EngineInterface, key: string): Promise<string[]> {
+  return update($, closedGroups, keys => (keys.includes(key) ? keys.filter(k => k !== key) : [...keys, key]))
 }
 
 // The peers a published version asks for. A version never changes once
@@ -473,15 +478,6 @@ async function auditProject($: EngineInterface): Promise<void> {
   } catch (err) {
     await setAudit($, { status: 'error', message: err instanceof Error ? err.message : String(err) })
   }
-}
-
-// Puts one severity's vulnerabilities on the clipboard of the surface the
-// press came from.
-async function copyVulns($: EngineInterface, severity: Severity, surface: Parameters<EngineInterface['ui']['copy']>[0]['surface']): Promise<void> {
-  const state = await read($, audit)
-  if (state.status !== 'done') return
-  const copied = await $.ui.copy({ text: copyVulnsText(state.findings, severity), surface })
-  $.ui.toast(copied.isCopied ? 'Copié las vulnerabilidades.' : `No pude copiar: ${copied.reason}`)
 }
 
 type Scanned = { upgrades: Upgrade[]; held: number; checked: number; failed: number }
@@ -884,6 +880,30 @@ async function changeFolder($: EngineInterface): Promise<void> {
   }
 }
 
+// "Actualizar rama": a git pull of the checked-out branch, fast-forward only so
+// a branch that went its own way is left as it is and the reason shown. The mod
+// runs git itself, so the app asks no permission. Then the session and the
+// libraries are read again: the pull may bring other versions.
+const PULL_MS = 120_000
+
+async function pullBranch($: EngineInterface): Promise<void> {
+  if ((await read($, pull)).status === 'running') return
+  await update($, pull, () => ({ status: 'running' }) as Pull)
+  const branch = (await read($, session)).branch
+  try {
+    const ran = await runCommand($, ['git', 'pull', '--ff-only'], PULL_MS)
+    const value: Pull =
+      ran.exitCode === 0
+        ? { status: 'done', text: `Rama ${branch || 'actual'} actualizada: ${pullSummary(ran.stdout)}` }
+        : { status: 'failed', message: tail(ran.stderr || ran.stdout) || `git pull terminó con código ${ran.exitCode}` }
+    await update($, pull, () => value)
+  } catch (err) {
+    await update($, pull, () => ({ status: 'failed', message: errorText(err) }) as Pull)
+  }
+  void loadSession($, true, false).catch(() => undefined)
+  if ((await read($, pull)).status === 'done') void runScan($, true).catch(() => undefined)
+}
+
 // The branch's click: a new tab in the app's Terminal panel, in the session's
 // folder, named after the branch.
 async function openTerminal($: EngineInterface, view: SessionView): Promise<void> {
@@ -1175,6 +1195,8 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e)
     const { Box, Text, Button, Link } = elements
+    // The terminal draws no SVG: baby Narsil shows on the other surfaces.
+    const Svg = 'Svg' in elements ? elements.Svg : undefined
     // The mobile app draws no text field: there tasks are added through Claude.
     const Input = e.surface !== 'mobile' && 'Input' in elements ? elements.Input : undefined
     const state = await read($, scan)
@@ -1201,6 +1223,7 @@ export const register: Register = on => {
         <Text dimColor>· revisiones del proyecto</Text>
       </Box>
     )
+    const picture = Svg ? <Svg source={narsilSvg(PARADA_CLARO, PARADA_OSCURO)} alt="Narsil bebé" /> : null
     // The upgrade section's head: a toggle, its name in the color of what
     // most needs you, and its count when it has one.
     const color = sectionColor(state)
@@ -1310,6 +1333,7 @@ export const register: Register = on => {
     const direct = new Map(found.status === 'done' ? found.findings.filter(f => f.isDirect).map(f => [`${f.ecosystem}:${f.name}`, f]) : [])
     const fixes = (u: Upgrade) => fixedBy(direct.get(`${u.ecosystem}:${u.name}`), u.latest)
     const vulnsOpen = await read($, isVulnsOpen)
+    const closed = new Set(await read($, closedGroups))
     const toggleVulns = async () => {
       await update($, isVulnsOpen, value => !value)
     }
@@ -1342,26 +1366,17 @@ export const register: Register = on => {
             const rows = bySeverity(found.findings, severity)
             if (rows.length === 0) return undefined
             const tone = SEVERITY_COLOR[severity]
+            const key = `vulns-${severity}`
+            const isShut = closed.has(key)
             return (
               <Box flexDirection="column" marginTop={1}>
                 <Box flexDirection="row" gap={1}>
                   <Text color={tone}>●</Text>
-                  <Text bold color={tone}>
-                    {SEVERITY_TITLE[severity]} ({rows.length})
-                  </Text>
+                  <Button key={`group-${key}`} plain label={groupLabel(!isShut, SEVERITY_TITLE[severity], rows.length)} onPress={() => toggleGroup($, key)} />
                 </Box>
-                <Box>
-                  <Button key={`copy-vulns-${severity}`} plain onPress={press => copyVulns($, severity, press.surface)}>
-                    Copiar
-                  </Button>
-                </Box>
-                {rows.map(({ finding, vuln }) => (
+                {!isShut && rows.map(({ finding, vuln }) => (
                   <Box flexDirection="column">
-                    <Text>
-                      {finding.display ?? finding.name} <Text dimColor>{finding.version}</Text>
-                      {finding.isDirect ? '' : <Text dimColor> · indirecta</Text>}
-                      <Text dimColor> · {vuln.id}</Text>
-                    </Text>
+                    <Button key={`vuln-${finding.ecosystem}:${finding.name}@${finding.version}:${vuln.id}`} plain label={`${finding.display ?? finding.name} ${finding.version}${finding.isDirect ? '' : ' · indirecta'} · ${vuln.id}`} onPress={press => copyRow($, vulnCopyText(finding, vuln), press.surface)} />
                     <Text dimColor wrap="truncate-end">
                       {'  '}
                       {vuln.summary}
@@ -1440,15 +1455,30 @@ export const register: Register = on => {
       </Box>
     )
 
+    // "Actualizar rama", last of all: a git pull of the checked-out branch.
+    const pulled = await read($, pull)
+    const pullSection = (
+      <Box flexDirection="column" marginTop={1}>
+        {pulled.status === 'done' && <Text color={PALETTE.done}>{pulled.text}</Text>}
+        {pulled.status === 'failed' && <Text color={PALETTE.error}>No pude actualizar la rama: {pulled.message}</Text>}
+        <Box flexDirection="row" gap={1}>
+          <Text dimColor>➜</Text>
+          {pulled.status === 'running' ? <Text dimColor>Actualizando la rama…</Text> : <Button key="branch-pull" onPress={() => pullBranch($)}>Actualizar rama</Button>}
+        </Box>
+      </Box>
+    )
+
     const frame = (body: JSX.Element) => (
       <Box flexDirection="column">
         {head}
+        {picture}
         {sessionSection}
         {section}
         {isOpen ? body : null}
         {vulnsSection}
         {vulnsOpen ? vulnsBody : null}
         {todosSection}
+        {pullSection}
       </Box>
     )
 
@@ -1508,34 +1538,22 @@ export const register: Register = on => {
           // An upgrade that fixes vulnerabilities goes first in its group.
           const rows = state.upgrades.filter(u => u.group === g.group).sort((a, b) => fixes(b) - fixes(a))
           if (rows.length === 0) return undefined
+          const key = `upgrade-${g.group}`
+          const isShut = closed.has(key)
           return (
             <Box flexDirection="column" marginTop={1}>
               <Box flexDirection="row" gap={1}>
                 <Text color={g.color}>●</Text>
-                <Text bold color={g.color}>
-                  {g.label} ({rows.length})
-                </Text>
+                <Button key={`group-${key}`} plain label={groupLabel(!isShut, g.label, rows.length)} onPress={() => toggleGroup($, key)} />
               </Box>
-              <Text dimColor>{g.hint}</Text>
-              {(g.group === 'blocked' || g.group === 'review') && (
-                <Box>
-                  <Button key={g.group === 'blocked' ? 'copy-blocked' : 'copy-majors'} plain onPress={press => copyGroup($, g.group, press.surface)}>
-                    Copiar con razones
-                  </Button>
-                </Box>
-              )}
-              {rows.map(u => {
+              {!isShut && <Text dimColor>{g.hint}</Text>}
+              {!isShut && rows.map(u => {
                 const why = g.group === 'review' ? explained[reasonKey(u)] : undefined
                 const line = g.group === 'blocked' ? { text: u.conflicts.join(' · '), color: PALETTE.error, isDim: false } : reasonLine(why)
+                const copy = upgradeCopyText(u, why?.status === 'done' ? why : undefined)
                 return (
                   <Box flexDirection="column">
-                    <Text>
-                      {u.display ?? u.name} <Text dimColor>{u.current} → </Text>
-                      {u.latest}
-                      {u.isDev ? <Text dimColor> · dev</Text> : ''}
-                      {state.ecosystems.length > 1 ? <Text dimColor> · {adapterOf(u.ecosystem).label}</Text> : ''}
-                      {fixes(u) > 0 ? <Text color={PALETTE.error}> · corrige {fixes(u) === 1 ? '1 vulnerabilidad' : `${fixes(u)} vulnerabilidades`}</Text> : ''}
-                    </Text>
+                    <Button key={`upgrade-${u.ecosystem}:${u.name}`} plain label={upgradeLine(u, state.ecosystems.length > 1 ? adapterOf(u.ecosystem).label : undefined, fixes(u))} onPress={press => copyRow($, copy, press.surface)} />
                     {line && (
                       <Text color={line.color} dimColor={line.isDim}>
                         {'  '}

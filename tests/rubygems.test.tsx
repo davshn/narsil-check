@@ -168,7 +168,7 @@ test('a Rails app lists its gems and the button raises the Gemfile and runs bund
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('6 para actualizar de 7 · 1 mayores · 5 triviales')
-  expect((await ui.find({ type: 'Text', text: /^rails/ }))?.text).toBe('rails 7.1.3 → 8.1.4.1')
+  expect((await ui.find({ type: 'Button', text: /^rails/ }))?.text).toBe('rails 7.1.3 → 8.1.4.1')
 
   await ui.press({ key: 'upgrade-bumps' })
   expect(ran.filter(argv => argv[0] === 'bundle')).toEqual([['bundle', 'update', '--conservative', 'nokogiri', 'pg', 'puma', 'rspec-rails', 'rubocop']])

@@ -9,7 +9,7 @@ import type { Installed } from '../hooks/npm'
 import { branchName, commitTitle, isMainBranch, prUrlOf } from '../hooks/git'
 import { specChanges } from '../hooks/ecosystems'
 import { sortUpgrades, summaryOf } from '../hooks/words'
-import { breakingVersions, changelogSince, copyText, importPattern, parseReason, releaseTags, repoOf } from '../hooks/explain'
+import { breakingVersions, changelogSince, importPattern, upgradeCopyText, parseReason, releaseTags, repoOf } from '../hooks/explain'
 
 // The test runner has timers; the hooks environment's types do not declare them.
 declare function setTimeout(fn: () => void, ms: number): unknown
@@ -270,9 +270,9 @@ test('opening a project with upgrades opens the pane and lists them, on every su
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('3 para actualizar de 4 · 1 mayores · 2 triviales')
-    expect((await ui.find({ type: 'Text', text: /^react/ }))?.text).toBe('react 18.2.0 → 19.2.0')
-    expect((await ui.find({ type: 'Text', text: /^zod/ }))?.text).toBe('zod 3.22.4 → 3.25.1')
-    expect((await ui.find({ type: 'Text', text: /^typescript/ }))?.text).toBe('typescript 5.4.5 → 5.9.3 · dev')
+    expect((await ui.find({ type: 'Button', text: /^react/ }))?.text).toBe('react 18.2.0 → 19.2.0')
+    expect((await ui.find({ type: 'Button', text: /^zod/ }))?.text).toBe('zod 3.22.4 → 3.25.1')
+    expect((await ui.find({ type: 'Button', text: /^typescript/ }))?.text).toBe('typescript 5.4.5 → 5.9.3 · dev')
     // A library that is current is not listed.
     expect(await ui.find({ type: 'Text', text: /^lodash/ })).toBeUndefined()
     await ui.unmount()
@@ -506,15 +506,15 @@ test("Haiku's answer is read as a difficulty and a reason", () => {
   expect(parseReason('no sé')).toBeUndefined()
 })
 
-test('the copied text lists each major with its reason', () => {
+test('a library copies as its jump, with its reason or what blocks it', () => {
   const react = { name: 'react', ecosystem: 'npm', spec: '^18.2.0', current: '18.2.0', latest: '19.2.0', bump: 'major', isDev: false, group: 'review', conflicts: [] as string[] } as const
-  const zod = { ...react, name: 'zod', current: '3.22.4', latest: '4.0.0' }
-  expect(copyText([react, zod], { 'react@18.2.0->19.2.0': { difficulty: 'alta', text: 'Quita propTypes.' } })).toBe(
-    ['Librerías con versión mayor pendiente:', '- react 18.2.0 → 19.2.0 (dificultad alta): Quita propTypes.', '- zod 3.22.4 → 4.0.0'].join('\n'),
-  )
+  expect(upgradeCopyText(react, { difficulty: 'alta', text: 'Quita propTypes.' })).toBe('react 18.2.0 → 19.2.0 (dificultad alta): Quita propTypes.')
+  expect(upgradeCopyText({ ...react, name: 'zod', current: '3.22.4', latest: '4.0.0' })).toBe('zod 3.22.4 → 4.0.0')
+  expect(upgradeCopyText({ ...react, name: 'typescript', current: '5.4.5', latest: '5.9.3', group: 'blocked', conflicts: ['ts-plugin exige typescript ~5.4.0', 'otra'] })).toBe('typescript 5.4.5 → 5.9.3: ts-plugin exige typescript ~5.4.0; otra')
+  expect(upgradeCopyText({ ...react, name: 'zod', current: '3.22.4', latest: '3.25.1', bump: 'minor', group: 'bump', isDev: true })).toBe('zod 3.22.4 → 3.25.1 (dev)')
 })
 
-test('each major shows the reason Haiku gives from the release notes and the imports, and the copy button copies them', async ($, on) => {
+test('each major shows the reason Haiku gives from the release notes and the imports, and a press on it copies it', async ($, on) => {
   const files = { ...FILES, 'node_modules/react/package.json': JSON.stringify({ version: '18.2.0', repository: { url: 'git+https://github.com/react/react.git' } }) }
   const web = { 'https://api.github.com/repos/react/react/releases/tags/v19.0.0': JSON.stringify({ body: 'Removed propTypes checks. Removed string refs.' }) }
   project(on, files, { ...LATEST }, [], web)
@@ -562,10 +562,8 @@ test('each major shows the reason Haiku gives from the release notes and the imp
   expect(asked[0]).toContain('in 2 files')
   expect((await ui.find({ type: 'Text', text: /^ *Dificultad/ }))?.text).toBe('  Dificultad media: React 19 quita propTypes; tus 2 imports no los usan, pero revisa las refs de texto.')
 
-  await ui.press({ key: 'copy-majors' })
-  expect(copied).toEqual([
-    'Librerías con versión mayor pendiente:\n- react 18.2.0 → 19.2.0 (dificultad media): React 19 quita propTypes; tus 2 imports no los usan, pero revisa las refs de texto.',
-  ])
+  await ui.press({ key: 'upgrade-npm:react' })
+  expect(copied).toEqual(['react 18.2.0 → 19.2.0 (dificultad media): React 19 quita propTypes; tus 2 imports no los usan, pero revisa las refs de texto.'])
   await ui.unmount()
 })
 
@@ -673,7 +671,7 @@ test('a blocked upgrade shows what blocks it and the button leaves it out', asyn
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /^Bloqueada/ }))?.text).toBe('Bloqueada (1)')
+  expect((await ui.find({ type: 'Button', text: /Bloqueada/ }))?.text).toBe('▾ Bloqueada (1)')
   expect((await ui.find({ type: 'Text', text: /exige typescript/ }))?.text).toBe('  ts-plugin exige typescript ~5.4.0')
   expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('3 para actualizar de 5 · 1 bloqueadas · 1 mayores · 1 triviales')
 
@@ -682,7 +680,7 @@ test('a blocked upgrade shows what blocks it and the button leaves it out', asyn
   await ui.unmount()
 })
 
-test('the blocked and the major groups each copy their own list', async ($, on) => {
+test('a press on a library copies it, with no copy buttons, and each group folds on its own', async ($, on) => {
   const files = {
     ...FILES,
     'package.json': JSON.stringify({
@@ -705,13 +703,19 @@ test('the blocked and the major groups each copy their own list', async ($, on) 
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await ui.press({ key: 'copy-blocked' })
-  await ui.press({ key: 'copy-majors' })
+  expect(await ui.find({ type: 'Button', text: /Copiar/ })).toBeUndefined()
+  await ui.press({ key: 'upgrade-npm:typescript' })
+  await ui.press({ key: 'upgrade-npm:react' })
+  expect(copied).toEqual(['typescript 5.4.5 → 5.9.3 (dev): ts-plugin exige typescript ~5.4.0', 'react 18.2.0 → 19.2.0'])
 
-  expect(copied).toEqual([
-    'Librerías bloqueadas:\n- typescript 5.4.5 → 5.9.3: ts-plugin exige typescript ~5.4.0',
-    'Librerías con versión mayor pendiente:\n- react 18.2.0 → 19.2.0',
-  ])
+  // Each group folds and unfolds by itself; the rest stay as they were.
+  await ui.press({ key: 'group-upgrade-blocked' })
+  expect((await ui.find({ type: 'Button', text: /Bloqueada/ }))?.text).toBe('▸ Bloqueada (1)')
+  expect(await ui.find({ type: 'Text', text: /exige typescript/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Button', key: 'upgrade-npm:typescript' })).toBeUndefined()
+  expect(await ui.find({ type: 'Button', key: 'upgrade-npm:react' })).toBeDefined()
+  await ui.press({ key: 'group-upgrade-blocked' })
+  expect((await ui.find({ type: 'Button', text: /Bloqueada/ }))?.text).toBe('▾ Bloqueada (1)')
   await ui.unmount()
 })
 
@@ -840,7 +844,7 @@ test('in a pnpm project, an upgrade published within minimumReleaseAge is blocke
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /^Bloqueada/ }))?.text).toBe('Bloqueada (1)')
+  expect((await ui.find({ type: 'Button', text: /Bloqueada/ }))?.text).toBe('▾ Bloqueada (1)')
   expect((await ui.find({ type: 'Text', text: /minimumReleaseAge/ }))?.text).toBe('  Publicada hace 1 h: pnpm espera 24 h para instalarla (minimumReleaseAge)')
 
   await ui.press({ key: 'upgrade-bumps' })
@@ -863,7 +867,7 @@ test('an exclusion only the worktree holds, not HEAD, blocks nothing less: the P
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /^Bloqueada/ }))?.text).toBe('Bloqueada (1)')
+  expect((await ui.find({ type: 'Button', text: /Bloqueada/ }))?.text).toBe('▾ Bloqueada (1)')
   await ui.unmount()
 })
 
@@ -881,6 +885,6 @@ test('outside git, the policy is read from the files as they are', async ($, on)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /^Bloqueada/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Button', text: /Bloqueada/ })).toBeUndefined()
   await ui.unmount()
 })

@@ -3,6 +3,7 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { GROUPS, PALETTE, commandHelp, sectionColor, sectionLabel } from '../hooks/words'
+import { PARADA_CLARO, PARADA_OSCURO } from '../hooks/narsil-art'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
 
@@ -91,6 +92,27 @@ async function scanned($: Engine) {
 
 const TYPED = { origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } } as const
 
+test('baby Narsil stands under the title, light or dark as the app is; the terminal draws no picture', async ($, on) => {
+  project(on)
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+
+  let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const picture = await ui.find({ type: 'Svg' })
+  expect(picture?.props.alt).toBe('Narsil bebé')
+  const source = String(picture?.props.source)
+  expect(source).toContain(PARADA_CLARO.src)
+  expect(source).toContain(PARADA_OSCURO.src)
+  // The dark one shows only under a dark color scheme.
+  expect(source).toContain('@media (prefers-color-scheme: dark){.claro{display:none}.oscuro{display:inline}}')
+  await ui.unmount()
+
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /Narsil Check/ }))?.text).toBe('● Narsil Check')
+  await ui.unmount()
+})
+
 test("the pane heads with Narsil Check, and the upgrade section opens when it finds upgrades and folds on a press", async ($, on) => {
   const { store } = project(on)
 
@@ -100,7 +122,7 @@ test("the pane heads with Narsil Check, and the upgrade section opens when it fi
     const ui = await $.ui.mount({ ...PANE, surface })
     expect((await ui.find({ type: 'Text', text: /Narsil Check/ }))?.text).toBe('● Narsil Check')
     expect((await ui.find({ type: 'Button', text: /Actualizaciones/ }))?.text).toBe('▾ Actualizaciones · 1')
-    expect((await ui.find({ type: 'Text', text: /^zod/ }))?.text).toBe('zod 3.22.4 → 3.25.1')
+    expect((await ui.find({ type: 'Button', text: /^zod/ }))?.text).toBe('zod 3.22.4 → 3.25.1')
     await ui.unmount()
   }
 
@@ -108,7 +130,7 @@ test("the pane heads with Narsil Check, and the upgrade section opens when it fi
   await ui.press({ key: 'section-upgrade' })
   expect((await ui.find({ type: 'Button', text: /Actualizaciones/ }))?.text).toBe('▸ Actualizaciones · 1')
   // Folded: the head stays, the section's body is gone.
-  expect(await ui.find({ type: 'Text', text: /^zod/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Button', text: /^zod/ })).toBeUndefined()
   expect((await ui.find({ type: 'Text', text: /Narsil Check/ }))?.text).toBe('● Narsil Check')
   await ui.unmount()
 })

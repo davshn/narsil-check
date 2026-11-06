@@ -123,7 +123,7 @@ test('a Go module finds majors through every published path, and the button runs
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('2 para actualizar de 4 · 1 mayores · 1 triviales')
-  expect((await ui.find({ type: 'Text', text: /^github.com\/go-chi/ }))?.text).toBe('github.com/go-chi/chi 1.5.4 → v5.5.0')
+  expect((await ui.find({ type: 'Button', text: /^github.com\/go-chi/ }))?.text).toBe('github.com/go-chi/chi 1.5.4 → v5.5.0')
   // Each next major is asked for until the first one that is not there
   // (after the scan, the release notes ask for the module once more).
   expect(asked.filter(p => p.startsWith('github.com/go-chi/chi')).slice(0, 6)).toEqual([
