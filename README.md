@@ -53,7 +53,7 @@ Las librerías desactualizadas, en cuatro grupos:
 | Grupo | Cuándo | Qué hacer |
 | --- | --- | --- |
 | **Fuera del SDK de Expo** | La versión instalada no cumple el rango que fija el SDK de Expo del proyecto. | `npx expo install --fix` |
-| **Bloqueada** | Algo impide subirla sola: una dependencia que no la acepta, un plugin del compilador atado a la versión actual, un comentario que la fija a propósito o una versión que pnpm todavía no instala por `minimumReleaseAge`. El motivo aparece debajo. | Resolver primero lo que la bloquea. |
+| **Bloqueada** | Algo impide subirla sola: una dependencia que no la acepta, un plugin del compilador atado a la versión actual, un comentario que la fija a propósito o una versión publicada hace menos de 24 horas. El motivo aparece debajo. | Resolver primero lo que la bloquea. |
 | **Versión mayor** | Hay una versión major nueva (o un salto de minor por debajo de 1.0.0). | Leer los cambios: pueden romper la API. |
 | **Solo subir la versión** | Hay un parche o una minor nueva. | Subir la versión. |
 
@@ -70,7 +70,32 @@ Solo en npm. Antes de clasificar una actualización, el panel hace tres comproba
 
 Cualquier actualización con un conflicto, sea de parche, menor o mayor, va al grupo **Bloqueada**, con cada conflicto escrito debajo, y el botón **Actualizar las N** nunca la incluye. Un peer que el proyecto no tiene instalado no cuenta como conflicto: es npm quien lo añade. Los conflictos se comparan con las versiones instaladas ahora; si subes varias juntas, puede que el bloqueo se resuelva entre ellas.
 
-En un proyecto con pnpm, una versión publicada hace menos de lo que pide `minimumReleaseAge` también va a **Bloqueada**, por ejemplo con *"Publicada hace 3 h: pnpm espera 24 h para instalarla (minimumReleaseAge)"*. Si se instalara, el `pnpm install --frozen-lockfile` del CI la rechazaría. El valor se lee de `pnpm-workspace.yaml` (o de `minimum-release-age` en `.npmrc`) tal como está en `HEAD`, porque eso es lo que ve el CI. Si no está, se usa el de pnpm: 1440 minutos (un día) desde pnpm 11 y ninguno en pnpm 10, según el `packageManager` de `package.json`. No hay excepciones: `minimumReleaseAgeExclude` se ignora, esté en `HEAD` o sin commit, y una versión cuya fecha de publicación no se puede leer (ni del registro ni con `pnpm view`) también queda bloqueada. Al instalar, pnpm corre con la política en modo estricto y sin excepciones, así que una dependencia que la actualización arrastra y es demasiado nueva hace fallar la instalación en vez de quedar en el lockfile con una excepción escrita en `pnpm-workspace.yaml`; el panel lo marca como *"Bloqueada por minimumReleaseAge"* con las versiones que pnpm rechazó y no se actualiza nada. Cuando la versión cumple la edad, deja de estar bloqueada en el siguiente escaneo.
+### Espera de 24 horas
+En todos los ecosistemas, una versión publicada hace menos de 24 horas va a **Bloqueada**, por ejemplo con *"Publicada hace 3 h: Narsil Check espera 24 h antes de subirla"*. Así una versión recién publicada, que todavía nadie ha probado o que puede venir de una cuenta comprometida, no entra sola en el proyecto. La fecha sale del registro de cada ecosistema:
+
+| Ecosistema | De dónde sale la fecha |
+| --- | --- |
+| npm y Expo | `time` del registro de npm; si no llega (paquetes de ~10 MB como astro), `pnpm view` o `npm view` |
+| PyPI | el primer archivo subido de esa versión |
+| Go | `Time` del proxy de Go |
+| Cargo | `created_at` de crates.io |
+| Pub | `published` de pub.dev |
+| NuGet | `published` del registro de NuGet |
+| RubyGems | `created_at` de rubygems.org |
+| Gradle y Maven | la fecha del POM (`Last-Modified`) en Maven Central, Google Maven o el Gradle Plugin Portal |
+| SwiftPM | la fecha del commit del tag, en GitHub. En otro servidor git no hay fecha, así que se bloquea |
+
+No hay excepciones: una versión cuya fecha no se puede leer también queda bloqueada, con *"No pude leer cuándo se publicó"*. Cuando la versión cumple el día, deja de estar bloqueada en el siguiente escaneo.
+
+En un proyecto Expo, una librería que el SDK fija se sube con `npx expo install --fix`, que instala la versión más nueva que cumple el rango del SDK. Esa versión también espera el día; mientras tanto la librería va a **Bloqueada** con la versión y el comando: *"El SDK de Expo pide 17.0.8 (npx expo install --fix). Publicada hace 1 h: …"*.
+
+En un proyecto con pnpm cuenta además su `minimumReleaseAge`, si es más largo que un día, con el aviso *"pnpm espera 48 h para instalarla (minimumReleaseAge)"*. Si se instalara antes, el `pnpm install --frozen-lockfile` del CI la rechazaría. El valor se lee de `pnpm-workspace.yaml` (o de `minimum-release-age` en `.npmrc`) tal como está en `HEAD`, porque eso es lo que ve el CI. Un valor menor que un día no baja la espera. `minimumReleaseAgeExclude` se ignora, esté en `HEAD` o sin commit.
+
+La espera también cubre las dependencias que arrastra una actualización, donde la herramienta lo permite:
+
+- **pnpm** instala con `minimumReleaseAge` en modo estricto y sin excepciones. Una dependencia demasiado nueva hace fallar la instalación en vez de quedar en el lockfile con una excepción escrita en `pnpm-workspace.yaml`. El panel lo marca como *"Bloqueada por minimumReleaseAge"* con las versiones que pnpm rechazó, y no se actualiza nada.
+- **npm** instala con `before` puesto un día atrás, así que cada rango se resuelve a versiones de hace al menos un día. Si un rango no tiene ninguna, el panel lo marca como *"Bloqueada por la espera de 24 h"* y no se actualiza nada.
+- **yarn, bun, Cargo, Go, uv, Poetry, Pub, NuGet, Bundler, SwiftPM, Gradle y Maven** no tienen una opción así, así que la espera se aplica a la librería que sube, no a lo que arrastra.
 
 ### Versiones fijadas a propósito
 En cualquier ecosistema cuyo manifest admite comentarios (todos menos npm, cuyo `package.json` no los tiene), una librería se bloquea si un comentario dice que se mantiene a propósito, en la línea de su versión o en la de arriba. Cuentan las palabras *pin*, *pinned*, *hold*, *keep*, *freeze*, *do not upgrade* y, en español, *fijar*, *fijado*, *congelado* o *no actualizar*. El panel muestra el comentario como motivo:

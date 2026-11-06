@@ -15,10 +15,10 @@ Branch: `main` (the repository's recent convention) · Delivery: `single-pr`-siz
 
 | ID | Specs | Route | Status | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | S1, S2, S4 | inline | pending | |
-| T2 | S3 | inline | pending | |
-| T3 | S1 | inline | pending | |
-| T4 | S1-S4 | inline | pending | |
+| T1 | S1, S2, S4 | inline | done | 1492ca5 |
+| T2 | S3 | inline | done | ca13b3c |
+| T3 | S1 | inline | done | 8c5f2a3 |
+| T4 | S1-S4 | inline | done | the closing commit |
 
 T1: each adapter names where a version's publication date is (`releasedUrls`, `releasedOf`); the scan checks every upgrade against max(24 h, pnpm's policy), unreadable dates block. T2: Expo group: the version its SDK range resolves to, from the version-time map, held to the wait. T3: npm installs with `before` set to 24 hours ago. T4: tests, README, version.
 
@@ -28,3 +28,5 @@ Route evidence: one behavior across adapters sharing one helper; no writer reaso
 
 - **L1** (2026-11-06) User: "Y el cuánto a expo, pasa igual con frameworks como kmp o alguno de los otros lenguajes? Tenemos que pensar en ellos?" and "El primero me interesa, deberíamos implementar algo similar para los otros lenguajes, es más seguro"; then "24 horas está perfecto".
 - **L2** Probes, each with a real package: PyPI `/pypi/{name}/{version}/json` urls[0].upload_time_iso_8601; crates.io `/api/v1/crates/{name}/{version}` version.created_at; Go proxy `/{path}/@v/{version}.info` Time; pub.dev `/api/packages/{name}/versions/{version}` published; NuGet `/v3/registration5-semver1/{id}/{version}.json` published; RubyGems `/api/v2/rubygems/{name}/versions/{version}.json` created_at; GitHub `/repos/{owner}/{repo}/commits/{tag}` commit.committer.date for SwiftPM; Maven Central, Google Maven and the Plugin Portal answer a version's POM with Last-Modified.
+- **L3** T1: 155 tests; every adapter test now answers dates through tests/released.ts (a year old by default). T2: the Expo test fails with the check disabled and passes with it. T3: npm 11.19.1 with npm_config_before a day back refused tailwindcss@^4.3.5 (ETARGET "with a date before") and resolved ^4.3.4 to 4.3.4, not the hour-old 4.3.5. 158 tests pass, validate clean.
+- **L4** Not covered, found while checking KMP: Compose Multiplatform and the Android Gradle Plugin are coupled to Kotlin and Gradle versions like Expo modules to the SDK, and no rule here knows them (the compiler-plugin list has SKIE, KSP, Mokkery, Realm, Metro, kotlinx-rpc, Anvil). Left for the user to decide.
