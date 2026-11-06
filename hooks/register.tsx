@@ -149,10 +149,10 @@ async function latestIn($: EngineInterface, adapter: Adapter, name: string, curr
   return version
 }
 
-// Which of an adapter's manifests and lockfiles the project has.
+// Which of an adapter's manifests, lockfiles and context files the project has.
 async function presentOf($: EngineInterface, adapter: Adapter): Promise<string[]> {
   const present: string[] = []
-  for (const file of [...adapter.manifests, ...adapter.lockfiles]) if (await $.fs.exists(file)) present.push(file)
+  for (const file of [...adapter.manifests, ...adapter.lockfiles, ...(adapter.contextFiles ?? [])]) if (await $.fs.exists(file)) present.push(file)
   // Manifests anywhere in the tree: the files git tracks or would track
   // (untracked, not ignored), so build output is left out.
   if (adapter.globs) {

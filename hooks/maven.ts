@@ -8,6 +8,7 @@ import type { Adapter, Dep, Files } from './adapter'
 import { escapeRegex, globRegex } from './adapter'
 import { compare, parseVersion } from './semver'
 import type { Version } from './semver'
+import { WRAPPER, kmpConflicts } from './kmp'
 import { parseToml, tableOf } from './toml'
 import type { TomlTable, TomlValue } from './toml'
 
@@ -291,6 +292,8 @@ export const MAVEN: Adapter = {
   manifests: [CATALOG, 'pom.xml', 'build.gradle.kts', 'build.gradle'],
   globs: [...GRADLE_GLOBS, POM_GLOB],
   lockfiles: [],
+  // The wrapper's Gradle version, for what AGP and Kotlin need.
+  contextFiles: [WRAPPER],
   parse: parseMaven,
   latestUrl: metadataUrl,
   // A Gradle plugin's own artifact (org.jlleitschuh.gradle:ktlint-gradle) is
@@ -321,7 +324,7 @@ export const MAVEN: Adapter = {
     const at = Date.parse(headers['last-modified'] ?? '')
     return Number.isNaN(at) ? undefined : new Date(at).toISOString()
   },
-  conflictsOf: kotlinConflicts,
+  conflictsOf: (u, deps, files) => [...kotlinConflicts(u, deps, files), ...kmpConflicts(u, deps, files)],
   repoUrlOf: pom => {
     const scm = /<scm>[\s\S]*?<url>\s*([^<\s]+)\s*<\/url>/.exec(pom)?.[1]
     const url = scm ?? /<url>\s*([^<\s]*github\.com[^<\s]*)\s*<\/url>/.exec(pom)?.[1]

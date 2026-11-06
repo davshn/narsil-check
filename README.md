@@ -110,6 +110,19 @@ ktor = "3.6.1" # pinned: 3.7 breaks auth
 ### Kotlin y los plugins del compilador
 Un plugin del compilador de Kotlin solo funciona con las versiones de Kotlin para las que se publicó: si no coinciden, el proyecto no compila (con SKIE, el framework de iOS). Por eso, si el proyecto declara uno, Kotlin pasa a **Bloqueada** aunque el salto sea un parche, por ejemplo con *"SKIE 0.10.16 es un plugin del compilador de Kotlin: confirma que soporta Kotlin 2.4.21"*. Se reconocen SKIE, KSP, Mokkery, Realm, Metro, kotlinx-rpc y Anvil, por sus coordenadas o por la clave del catálogo (`mokkery = "3.6.0"` cuenta aunque solo lo lea un módulo de `build-logic`). KSP se comprueba exactamente: su versión lleva dentro la de Kotlin para la que se hizo (`2.4.20-1.0.30`), y una de KSP2 sin Kotlin en el nombre (`2.3.0`) sirve para cualquiera. Las librerías `kotlinx` (coroutines, serialization) no cuentan como Kotlin: suben por su cuenta.
 
+### Gradle, AGP, Kotlin y Compose Multiplatform
+En un proyecto Android o Kotlin Multiplatform, estas herramientas dependen unas de otras, igual que los módulos de Expo dependen del SDK. Subir una sola puede romper el build, así que va a **Bloqueada** cuando la otra no llega al mínimo:
+
+| Sube | Necesita | Fuente |
+| --- | --- | --- |
+| Android Gradle Plugin | la versión de Gradle mínima de esa AGP, comparada con la que fija `gradle/wrapper/gradle-wrapper.properties`. Ejemplo: *"AGP 8.13.0 necesita Gradle 8.13 o más; el wrapper usa 8.11.1"* | [Google](https://developer.android.com/build/releases/about-agp) |
+| AGP 9, desde 8.x | que ningún módulo combine `org.jetbrains.kotlin.multiplatform` con `com.android.library` o `com.android.application` (pasan a `com.android.kotlin.multiplatform.library`) y que no se use kapt | [Google](https://developer.android.com/build/migrate-to-built-in-kotlin) |
+| Kotlin | la AGP y el Gradle mínimos de su plugin de Gradle (Kotlin 2.4 necesita AGP 8.5.2) | [JetBrains](https://kotlinlang.org/docs/gradle-configure-project.html) |
+| Compose Multiplatform | el Kotlin mínimo para iOS y web (1.10 necesita Kotlin 2.2, 1.11 y 1.12 necesitan 2.3) y AGP 8.1 desde 1.7 | [JetBrains](https://github.com/JetBrains/compose-multiplatform/blob/master/CHANGELOG.md) |
+| KSP 2.3.12 o más | AGP 8.12.0 | [KSP](https://github.com/google/ksp/releases) |
+
+Solo se comprueban los mínimos. Los máximos que publica JetBrains son lo que tiene soporte completo, no un fallo, y Google mismo combina versiones que los pasan. Una versión de AGP o de Compose Multiplatform más nueva que las tablas que conoce el panel también queda bloqueada, con *"confirma qué Gradle necesita"*. Lo mismo pasa con una actualización de AGP cuando el proyecto no tiene el wrapper de Gradle. El wrapper solo se lee: nunca entra en el commit del PR.
+
 ### Por qué una versión mayor no es trivial
 Debajo de cada librería con versión mayor, el panel muestra la dificultad (baja, media o alta) y la razón, en una o dos frases. Para eso, Haiku recibe:
 

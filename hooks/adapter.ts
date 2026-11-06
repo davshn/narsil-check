@@ -26,6 +26,9 @@ export type Adapter = {
   globs?: string[]
   // The lockfiles it reads for installed versions, and a commit carries.
   lockfiles: string[]
+  // Files read only for what an upgrade breaks (Gradle's wrapper, for the
+  // Gradle version the Android Gradle Plugin needs); a commit never carries them.
+  contextFiles?: string[]
   parse: (files: Files) => Dep[]
   // Where its registry answers the latest release of `name`, and how.
   latestUrl: (name: string) => string
