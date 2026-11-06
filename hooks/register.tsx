@@ -812,11 +812,13 @@ async function loadSession($: EngineInterface, isFinal = true, withServers = tru
   return isRead
 }
 
-// The app's servers may connect after the session starts: the first read is
-// retried, waiting longer each time, half a minute in all; the last try
-// shows what failed. Four reads at most: other mods count five failed calls
-// in a row as a loop.
-const SESSION_RETRIES_MS = [2_000, 8_000, 20_000]
+// The app's servers connect after the session starts, and a call that comes
+// while the app has not yet confirmed which server serves the tool makes the
+// app ask the person for permission, whatever the permission mode. So the
+// first read waits ten seconds and is made once; if it fails, it is made again
+// as the first turn starts, when the servers are surely confirmed.
+const SESSION_DELAY_MS = 10_000
+let isStartPending = false
 
 // The tools that change what the app's servers report: Remote Control, the
 // worktree, the folder and the connectors. A turn that used none of them
@@ -826,11 +828,9 @@ let isInTurn = false
 let isSessionTouched = false
 
 async function loadSessionAtStart($: EngineInterface): Promise<void> {
-  for (const wait of SESSION_RETRIES_MS) {
-    if (await loadSession($, false)) return
-    await $.clock.sleep(wait)
-  }
-  await loadSession($)
+  isStartPending = false
+  await $.clock.sleep(SESSION_DELAY_MS)
+  isStartPending = !(await loadSession($, false))
 }
 
 // Turns Remote Control on or off for this session, as the session bar's
@@ -1071,6 +1071,10 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       isInTurn = true
       isSessionTouched = false
+      if (isStartPending) {
+        isStartPending = false
+        void loadSession($).catch(() => undefined)
+      }
     }
     return next(e)
   })

@@ -70,6 +70,16 @@ async function settled($: Engine, pattern: RegExp) {
   }
 }
 
+// Starts the session and lets the delayed first read of the app's servers run.
+async function opened($: Engine, on: On) {
+  const clock = mock.clock(on)
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await clock.settle()
+  await clock.advance(10_000)
+  await settled($, /Conectores · 2/)
+  return clock
+}
+
 // Waits for the Remote Control switch to show a knob.
 async function knob($: Engine, glyph: string) {
   for (let i = 0; i < 100; i++) {
@@ -120,8 +130,7 @@ test('the session section reads the app servers and names what it found', () => 
 
 test('the pane opens with the session first: Entorno unfolded, then Conectores folded, above upgrades', async ($, on) => {
   app(on, { state: 'off' })
-  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  await settled($, /Conectores · 2/)
+  await opened($, on)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const buttons = (await ui.findAll({ type: 'Button' })).map(b => b.text)
@@ -145,8 +154,7 @@ test('the pane opens with the session first: Entorno unfolded, then Conectores f
 
 test('the Remote Control switch turns it on through the app, then off again', async ($, on) => {
   const { calls } = app(on, { state: 'off' })
-  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  await settled($, /Conectores · 2/)
+  await opened($, on)
 
   // The switch lives in the Entorno fold, open from the start.
   let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
@@ -167,8 +175,7 @@ test('the Remote Control switch turns it on through the app, then off again', as
 
 test('the folder picks a new working folder and moves there; the branch opens a terminal in the folder', async ($, on) => {
   const { calls } = app(on, { state: 'off' })
-  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  await settled($, /Conectores · 2/)
+  await opened($, on)
 
   let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'env-branch' })
@@ -185,25 +192,33 @@ test('the folder picks a new working folder and moves there; the branch opens a 
   await ui.unmount()
 })
 
-test('servers that connect after the session starts are read once they answer, with no click', async ($, on) => {
+test("the app's servers are first asked ten seconds after the session starts, once; a failed read is tried again as the first turn starts", async ($, on) => {
   const clock = mock.clock(on)
-  // Two reads fail (two calls each) before the app's servers answer.
-  app(on, { state: 'off' }, 4)
+  // The first read fails (two calls) before the app's servers answer.
+  const { calls } = app(on, { state: 'off' }, 2)
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await clock.settle()
+  await clock.advance(9_000)
+  expect(calls.length).toBe(0)
 
-  // While it retries the section reads, it shows no error.
+  await clock.advance(1_000)
+  await clock.settle()
+  for (let i = 0; i < 20; i++) await new Promise<void>(resolve => setTimeout(() => resolve(), 5))
+  expect(calls.length).toBe(2)
+  // No quick retries: the section reads, with no error, until the turn starts.
+  await clock.advance(60_000)
+  await clock.settle()
+  expect(calls.length).toBe(2)
   let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /Leyendo/ }))?.text).toBe('Leyendo la sesión…')
-  expect((await ui.find({ type: 'Button', key: 'section-connectors' }))?.text).toBe('▸ Conectores')
   await ui.unmount()
 
-  await clock.advance(2_000)
-  await clock.advance(8_000)
+  await $.turn.start({ text: 'hola', turnId: 't0' })
   await settled($, /Conectores · 2/)
   ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Button', key: 'env-branch' }))?.text).toBe('feat/login')
-  expect((await ui.find({ type: 'Text', text: /No pude/ }))).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /No pude/ })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -211,8 +226,7 @@ test('the session is read again as each main turn ends: a branch switched in the
   const git: Record<string, string> = {}
   app(on, { state: 'off' }, 0, git)
   on('turn.complete', (_, e) => ({ text: e.answer }))
-  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  await settled($, /Conectores · 2/)
+  await opened($, on)
 
   git['git branch --show-current'] = 'main\n'
   await $.turn.complete({ turnId: 't1', reason: 'answer', answer: '', durationMs: 1, isAborted: false })
@@ -222,26 +236,25 @@ test('the session is read again as each main turn ends: a branch switched in the
   await ui.unmount()
 })
 
-test('a server the mod cannot reach says why once the retries run out', async ($, on) => {
+test('a server the mod cannot reach says why once the first turn has tried it too', async ($, on) => {
   const clock = mock.clock(on)
   const { calls } = app(on, { state: 'off' }, Number.POSITIVE_INFINITY)
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  for (const wait of [2_000, 8_000, 20_000]) {
-    await clock.settle()
-    await clock.advance(wait)
-  }
   await clock.settle()
+  await clock.advance(10_000)
+  await clock.settle()
+  await $.turn.start({ text: 'hola', turnId: 't0' })
   for (let i = 0; i < 20; i++) await new Promise<void>(resolve => setTimeout(() => resolve(), 5))
-  // Four reads in all: fewer than the five failures in a row other mods take for a loop.
-  expect(calls.filter(c => c.tool === 'get_session').length).toBe(4)
-  expect(calls.filter(c => c.server === 'ccd_connectors').length).toBe(4)
+  // Two reads in all, each asking both servers once.
+  expect(calls.filter(c => c.tool === 'get_session').length).toBe(2)
+  expect(calls.filter(c => c.server === 'ccd_connectors').length).toBe(2)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /control remoto:/ }))?.text).toMatch(/^No pude leer o cambiar el control remoto: .+/)
   await ui.press({ key: 'section-connectors' })
   // A failed call reaches the plugin as an error; its words are the engine's.
   expect((await ui.find({ type: 'Text', text: /conectores:/ }))?.text).toMatch(/^No pude leer los conectores: .+/)
-  expect((await ui.find({ type: 'Text', text: /control remoto:/ }))?.text).toMatch(/^No pude leer o cambiar el control remoto: .+/)
   expect(await ui.find({ type: 'Button', text: /^(Activar|Desactivar)$/ })).toBeUndefined()
   await ui.unmount()
 })
@@ -252,8 +265,7 @@ test("a turn that touched no session tool reads only git again, not the app's se
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('tool.call', () => ({ result: 'ok' }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
-  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  await settled($, /Conectores · 2/)
+  await opened($, on)
   const before = calls.length
 
   git['git branch --show-current'] = 'main\n'
@@ -270,8 +282,7 @@ test("a turn that used one of the app's session tools reads the app's servers ag
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('tool.call', () => ({ result: 'ok' }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
-  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  await settled($, /Conectores · 2/)
+  await opened($, on)
 
   remote.state = 'on'
   await $.turn.start({ text: 'activa remote control', turnId: 't2' })
