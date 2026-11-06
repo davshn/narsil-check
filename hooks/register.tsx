@@ -825,12 +825,14 @@ async function upgradeBumps($: EngineInterface): Promise<void> {
     for (const { adapter, present, upgrades } of plans) {
       const files = await readFiles($, present)
       if (adapter.rewrite) for (const [path, text] of Object.entries(adapter.rewrite(files, upgrades))) await $.fs.write(path, text)
-      // pnpm installs under minimumReleaseAge strictly and with no
-      // exclusions: a young version anywhere in the tree fails the install
-      // instead of landing in the lockfile with an exception.
-      const minutes = adapter.id === 'npm' && adapter.managerOf(present) === 'pnpm' ? await releaseMinutes($) : 0
+      // pnpm and npm install under the wait through the whole tree: pnpm
+      // strictly and with no exclusions, npm resolving to versions published
+      // before then. A young version anywhere fails the install instead of
+      // landing in the lockfile.
+      const tool = adapter.id === 'npm' ? adapter.managerOf(present) : ''
+      const minutes = tool === 'pnpm' || tool === 'npm' ? Math.max(RELEASE_AGE, await releaseMinutes($)) : 0
       for (const argv of adapter.installArgv(present, upgrades, files)) {
-        const ran = await runCommand($, argv, INSTALL_MS, releaseAgeEnv(minutes))
+        const ran = await runCommand($, argv, INSTALL_MS, releaseAgeEnv(tool, minutes))
         if (ran.exitCode !== 0) {
           const refused = minutes > 0 ? ageRefusal(`${ran.stderr}\n${ran.stdout}`, minutes) : undefined
           await setJob($, { status: 'failed', message: refused ?? `${argv.slice(0, 2).join(' ')} terminó con código ${ran.exitCode}: ${tail(ran.stderr || ran.stdout)}` })

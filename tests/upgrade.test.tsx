@@ -1008,3 +1008,35 @@ test('a version the Expo SDK pins waits a day too: the newest one its range take
   expect((await ui.find({ type: 'Button', text: /Fuera del SDK de Expo/ }))?.text).toBe('▾ Fuera del SDK de Expo (1)')
   await ui.unmount()
 })
+
+test('npm installs with before set a day back, so a range resolves only to versions a day old, its dependencies included', async ($, on) => {
+  project(on, { ...FILES }, { ...LATEST })
+  const ran = host(on)
+  on('ui.toast', () => ({ value: undefined }))
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const pressedAt = Date.now()
+  await ui.press({ key: 'upgrade-bumps' })
+  const env = ran.envs[ran.findIndex(argv => argv[0] === 'npm' && argv[1] === 'install')]
+  const before = Date.parse(env?.npm_config_before ?? '')
+  expect(Math.abs(pressedAt - 24 * 60 * 60 * 1000 - before)).toBeLessThan(60_000)
+  await ui.unmount()
+})
+
+test('an install npm refuses for a range with nothing a day old says so and installs nothing', async ($, on) => {
+  project(on, { ...FILES }, { ...LATEST })
+  const stderr = 'npm error code ETARGET\nnpm error notarget No matching version found for zod@^3.25.1 with a date before 5/11/2026, 2:59:02 p. m..\nnpm error notarget In most cases you or one of your dependencies are requesting a package version that doesn\'t exist.'
+  host(on, undefined, 'main', { 'npm install zod@^3.25.1': { stderr, exitCode: 1 } })
+  on('ui.toast', () => ({ value: undefined }))
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'upgrade-bumps' })
+  expect((await ui.find({ type: 'Text', text: /Bloqueada por la espera/ }))?.text).toBe(
+    'Bloqueada por la espera de 24 h: npm no encuentra una versión publicada hace más de 24 h y no se actualizó nada.\n  No matching version found for zod@^3.25.1 with a date before 5/11/2026, 2:59:02 p. m..',
+  )
+  await ui.unmount()
+})

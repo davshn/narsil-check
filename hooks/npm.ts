@@ -274,23 +274,33 @@ export function ageConflict(published: string | undefined, now: number, minutes:
   return `Publicada hace ${ago}: ${rule}`
 }
 
-// The environment pnpm installs under: the policy, strict and with no
-// exclusions, so pnpm refuses a young version anywhere in the tree instead
-// of writing an exception to pnpm-workspace.yaml.
-export function releaseAgeEnv(minutes: number): Record<string, string> | undefined {
+// The environment an install runs under so the wait holds through the whole
+// tree, not only the upgraded packages: pnpm's minimumReleaseAge, strict and
+// with no exclusions, so pnpm refuses a young version instead of writing an
+// exception to pnpm-workspace.yaml; npm's `before`, so npm resolves every
+// range to versions published before then. Yarn and bun get none.
+export function releaseAgeEnv(manager: string, minutes: number, now: number = Date.now()): Record<string, string> | undefined {
   if (minutes <= 0) return undefined
-  return {
-    PNPM_CONFIG_MINIMUM_RELEASE_AGE: String(minutes),
-    PNPM_CONFIG_MINIMUM_RELEASE_AGE_STRICT: 'true',
-    PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '[]',
+  if (manager === 'pnpm') {
+    return {
+      PNPM_CONFIG_MINIMUM_RELEASE_AGE: String(minutes),
+      PNPM_CONFIG_MINIMUM_RELEASE_AGE_STRICT: 'true',
+      PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '[]',
+    }
   }
+  if (manager === 'npm') return { npm_config_before: new Date(now - minutes * 60_000).toISOString() }
+  return undefined
 }
 
-// What the pane says when pnpm refused an install for minimumReleaseAge, with
-// pnpm's own list of the versions; undefined for any other failure.
+// What the pane says when pnpm or npm refused an install for the wait, with
+// the tool's own words on the versions; undefined for any other failure.
 export function ageRefusal(output: string, minutes: number): string | undefined {
-  if (!/ERR_PNPM_NO_MATURE_MATCHING_VERSION|does not meet the minimumReleaseAge/.test(output)) return undefined
   const lines = output.split(/\r?\n/)
+  if (/with a date before/.test(output)) {
+    const detail = lines.filter(line => /notarget No matching version/.test(line)).map(line => line.replace(/^npm (error|ERR!) notarget /, '  '))
+    return [`Bloqueada por la espera de ${span(minutes)}: npm no encuentra una versión publicada hace más de ${span(minutes)} y no se actualizó nada.`, ...detail].join('\n')
+  }
+  if (!/ERR_PNPM_NO_MATURE_MATCHING_VERSION|does not meet the minimumReleaseAge/.test(output)) return undefined
   const from = lines.findIndex(line => /minimumReleaseAge constraint/.test(line))
   const help = lines.findIndex((line, i) => i > from && /^\s*help:/.test(line))
   const detail = from === -1 ? [] : lines.slice(from, help === -1 ? from + 9 : Math.min(help, from + 9)).filter(line => line.trim())
