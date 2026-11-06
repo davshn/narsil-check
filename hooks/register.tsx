@@ -24,7 +24,7 @@ import type { Reason } from './explain'
 import { ADAPTERS, NPM, adapterOf, holdNote, manifestOf, manifestsOf, specChanges } from './ecosystems'
 import type { Adapter, Dep, Files } from './ecosystems'
 import { branchName, commitBody, commitTitle, isMainBranch, prBody, prUrlOf } from './git'
-import { EXPO_TABLE, LOCK, MANIFEST, NPMRC, WORKSPACE, ageConflict, expoTableUrl, installedFromManifest, installedOf, isAgeExcluded, latestUrl, packumentUrl, parseManifest, peerConflicts, pinConflicts, publishedAt, releaseAgeOf, upgradeOf, versionUrl } from './npm'
+import { EXPO_TABLE, LOCK, MANIFEST, NPMRC, WORKSPACE, ageConflict, ageRefusal, expoTableUrl, installedFromManifest, installedOf, latestUrl, packumentUrl, parseManifest, peerConflicts, pinConflicts, publishedAt, releaseAgeEnv, releaseAgeOf, upgradeOf, versionUrl } from './npm'
 import type { Declared, Found, Installed } from './npm'
 import { baseOf, bumpOf, parseVersion, show } from './semver'
 import {
@@ -94,6 +94,7 @@ const EXPLAIN_MS = 60_000
 // An install may download a lot: the most $.process.run allows is ten minutes.
 const INSTALL_MS = 10 * 60 * 1000
 const GIT_MS = 2 * 60 * 1000
+const VIEW_MS = 30 * 1000
 
 // A registry answer is reused for this long, across sessions and projects.
 const CACHE_MS = 6 * 60 * 60 * 1000
@@ -311,28 +312,45 @@ async function targetPeers($: EngineInterface, name: string, version: string): P
   return target
 }
 
-// The upgrades pnpm would refuse for being younger than its
-// minimumReleaseAge, each with why. Only in a pnpm project; a publication
-// date that cannot be read blocks nothing. A date never changes once
-// published, so it is kept for good.
-async function youngConflicts($: EngineInterface, upgrades: Upgrade[]): Promise<Map<Upgrade, string[]>> {
-  const young = new Map<Upgrade, string[]>()
-  if (!(await $.fs.exists('pnpm-lock.yaml'))) return young
-  // The policy as HEAD holds it: CI installs from the commit, and the PR
-  // carries package.json and the lockfile alone, so an exclusion added in the
-  // worktree (pnpm may write one while installing) never reaches CI. Outside
-  // git, the file as it is.
+// The minutes pnpm's minimumReleaseAge waits in a pnpm project, else 0. Read
+// as HEAD holds it: CI installs from the commit, and the PR carries
+// package.json and the lockfile alone. Outside git, the file as it is.
+// minimumReleaseAgeExclude never counts, at HEAD or in the worktree.
+async function releaseMinutes($: EngineInterface): Promise<number> {
+  if (!(await $.fs.exists('pnpm-lock.yaml'))) return 0
   const text = async (path: string) => {
     const head = await $.process.run(['git', '--no-pager', 'show', `HEAD:${path}`], { timeoutMs: GIT_MS }).catch(() => undefined)
     if (head?.exitCode === 0) return head.stdout
     if (head && /does not exist in|exists on disk, but not in/.test(head.stderr)) return undefined
     return (await $.fs.exists(path)) ? await $.fs.read(path).catch(() => undefined) : undefined
   }
-  const { minutes, exclude } = releaseAgeOf({ workspace: await text(WORKSPACE), npmrc: await text(NPMRC), manifest: await readJson($, MANIFEST) })
+  return releaseAgeOf({ workspace: await text(WORKSPACE), npmrc: await text(NPMRC), manifest: await readJson($, MANIFEST) }).minutes
+}
+
+// A version's publication time as `pnpm view` reads it, or undefined when
+// pnpm cannot say.
+async function viewedAt($: EngineInterface, name: string, version: string): Promise<string | undefined> {
+  try {
+    const ran = await runCommand($, ['pnpm', 'view', name, 'time', '--json'], VIEW_MS)
+    if (ran.exitCode !== 0 || ran.isStdoutTruncated) return undefined
+    const time = (JSON.parse(ran.stdout) as Record<string, unknown>)[version]
+    return typeof time === 'string' ? time : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// The upgrades pnpm would refuse for being younger than its
+// minimumReleaseAge, each with why: one whose publication date cannot be read
+// is refused too. Only in a pnpm project. A date never changes once
+// published, so it is kept for good.
+async function youngConflicts($: EngineInterface, upgrades: Upgrade[]): Promise<Map<Upgrade, string[]>> {
+  const young = new Map<Upgrade, string[]>()
+  const minutes = await releaseMinutes($)
   if (minutes <= 0) return young
   const now = Date.now()
   await pool(upgrades, CONCURRENCY, async u => {
-    if (u.group === 'expo' || isAgeExcluded(u.name, u.latest, exclude)) return
+    if (u.group === 'expo') return
     const key = `published:${u.name}@${u.latest}`
     let published = (await $.store.get(key)) as string | undefined
     if (published === undefined) {
@@ -342,6 +360,9 @@ async function youngConflicts($: EngineInterface, upgrades: Upgrade[]): Promise<
       } catch {
         published = undefined
       }
+      // The host does not hand back a large packument (astro's and
+      // tailwindcss's run to ~10 MB), so pnpm reads the dates itself.
+      if (!published) published = await viewedAt($, u.name, u.latest)
       if (published) await $.store.set(key, published)
     }
     const why = ageConflict(published, now, minutes)
@@ -617,13 +638,14 @@ function setJob($: EngineInterface, value: Job): Promise<Job> {
 
 // Runs a command. With no shell, Windows starts npm only by its .cmd shim,
 // so a command that cannot start is tried again as one.
-async function runCommand($: EngineInterface, argv: string[], timeoutMs = INSTALL_MS) {
+async function runCommand($: EngineInterface, argv: string[], timeoutMs = INSTALL_MS, env?: Record<string, string>) {
   const [command, ...args] = argv
+  const init = env ? { timeoutMs, env } : { timeoutMs }
   try {
-    return await $.process.run(argv, { timeoutMs })
+    return await $.process.run(argv, init)
   } catch (err) {
     try {
-      return await $.process.run([`${command}.cmd`, ...args], { timeoutMs })
+      return await $.process.run([`${command}.cmd`, ...args], init)
     } catch {
       throw err
     }
@@ -748,10 +770,15 @@ async function upgradeBumps($: EngineInterface): Promise<void> {
     for (const { adapter, present, upgrades } of plans) {
       const files = await readFiles($, present)
       if (adapter.rewrite) for (const [path, text] of Object.entries(adapter.rewrite(files, upgrades))) await $.fs.write(path, text)
+      // pnpm installs under minimumReleaseAge strictly and with no
+      // exclusions: a young version anywhere in the tree fails the install
+      // instead of landing in the lockfile with an exception.
+      const minutes = adapter.id === 'npm' && adapter.managerOf(present) === 'pnpm' ? await releaseMinutes($) : 0
       for (const argv of adapter.installArgv(present, upgrades, files)) {
-        const ran = await runCommand($, argv)
+        const ran = await runCommand($, argv, INSTALL_MS, releaseAgeEnv(minutes))
         if (ran.exitCode !== 0) {
-          await setJob($, { status: 'failed', message: `${argv.slice(0, 2).join(' ')} terminó con código ${ran.exitCode}: ${tail(ran.stderr || ran.stdout)}` })
+          const refused = minutes > 0 ? ageRefusal(`${ran.stderr}\n${ran.stdout}`, minutes) : undefined
+          await setJob($, { status: 'failed', message: refused ?? `${argv.slice(0, 2).join(' ')} terminó con código ${ran.exitCode}: ${tail(ran.stderr || ran.stdout)}` })
           await runScan($, true)
           return
         }
