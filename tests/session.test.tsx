@@ -198,8 +198,8 @@ test('servers that connect after the session starts are read once they answer, w
   expect((await ui.find({ type: 'Button', key: 'section-connectors' }))?.text).toBe('▸ Conectores')
   await ui.unmount()
 
-  await clock.advance(1_000)
   await clock.advance(2_000)
+  await clock.advance(8_000)
   await settled($, /Conectores · 2/)
   ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Button', key: 'env-branch' }))?.text).toBe('feat/login')
@@ -224,14 +224,17 @@ test('the session is read again as each main turn ends: a branch switched in the
 
 test('a server the mod cannot reach says why once the retries run out', async ($, on) => {
   const clock = mock.clock(on)
-  app(on, { state: 'off' }, Number.POSITIVE_INFINITY)
+  const { calls } = app(on, { state: 'off' }, Number.POSITIVE_INFINITY)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  for (const wait of [1_000, 2_000, 4_000, 8_000, 15_000, 30_000]) {
+  for (const wait of [2_000, 8_000, 20_000]) {
     await clock.settle()
     await clock.advance(wait)
   }
   await clock.settle()
   for (let i = 0; i < 20; i++) await new Promise<void>(resolve => setTimeout(() => resolve(), 5))
+  // Four reads in all: fewer than the five failures in a row other mods take for a loop.
+  expect(calls.filter(c => c.tool === 'get_session').length).toBe(4)
+  expect(calls.filter(c => c.server === 'ccd_connectors').length).toBe(4)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /control remoto:/ }))?.text).toMatch(/^No pude leer o cambiar el control remoto: .+/)
@@ -241,4 +244,39 @@ test('a server the mod cannot reach says why once the retries run out', async ($
   expect((await ui.find({ type: 'Text', text: /control remoto:/ }))?.text).toMatch(/^No pude leer o cambiar el control remoto: .+/)
   expect(await ui.find({ type: 'Button', text: /^(Activar|Desactivar)$/ })).toBeUndefined()
   await ui.unmount()
+})
+
+test("a turn that touched no session tool reads only git again, not the app's servers", async ($, on) => {
+  const git: Record<string, string> = {}
+  const { calls } = app(on, { state: 'off' }, 0, git)
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('tool.call', () => ({ result: 'ok' }))
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await settled($, /Conectores · 2/)
+  const before = calls.length
+
+  git['git branch --show-current'] = 'main\n'
+  await $.turn.start({ text: 'lee el README', turnId: 't1' })
+  await $.tool.call({ tool: 'Read', tool_use_id: 'r1', file_path: 'README.md' })
+  await $.turn.complete({ turnId: 't1', reason: 'answer', answer: '', durationMs: 1, isAborted: false })
+  await settled($, /^main$/)
+  expect(calls.length).toBe(before)
+})
+
+test("a turn that used one of the app's session tools reads the app's servers again", async ($, on) => {
+  const remote = { state: 'off' }
+  const { calls } = app(on, remote, 0)
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('tool.call', () => ({ result: 'ok' }))
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await settled($, /Conectores · 2/)
+
+  remote.state = 'on'
+  await $.turn.start({ text: 'activa remote control', turnId: 't2' })
+  await $.tool.call({ tool: 'mcp__ccd_session_mgmt__set_remote_control', tool_use_id: 's1', session_id: 'self', enabled: true })
+  await $.turn.complete({ turnId: 't2', reason: 'answer', answer: '', durationMs: 1, isAborted: false })
+  for (let i = 0; i < 50 && calls.filter(c => c.tool === 'get_session').length < 2; i++) await new Promise<void>(resolve => setTimeout(() => resolve(), 5))
+  expect(calls.filter(c => c.tool === 'get_session').length).toBe(2)
 })

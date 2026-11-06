@@ -771,8 +771,10 @@ const errorText = (err: unknown) => (err instanceof Error ? err.message : String
 // keeps its reason, so the section says why instead of staying empty.
 // `isFinal: false` writes only a full read, so a failed one leaves the
 // section reading instead of showing an error that a retry may clear.
+// `withServers: false` reads only the folder and git, keeping what the app's
+// servers last said: each call to them reaches every other mod as a tool call.
 // Resolves whether the app's servers answered.
-async function loadSession($: EngineInterface, isFinal = true): Promise<boolean> {
+async function loadSession($: EngineInterface, isFinal = true, withServers = true): Promise<boolean> {
   const cwd = await $.session.cwd().catch(() => '')
   const branch = await $.process
     .run(['git', 'branch', '--show-current'], { timeoutMs: SESSION_MS })
@@ -782,6 +784,10 @@ async function loadSession($: EngineInterface, isFinal = true): Promise<boolean>
     .run(['git', 'remote', 'get-url', 'origin'], { timeoutMs: SESSION_MS })
     .then(r => (r.exitCode === 0 ? (webUrlOf(r.stdout) ?? '') : ''))
     .catch(() => '')
+  if (!withServers) {
+    await setSession($, view => ({ ...view, isLoaded: true, repository, cwd, branch }))
+    return true
+  }
 
   let connectors: Pick<SessionView, 'connectors' | 'connectorsError'>
   try {
@@ -807,9 +813,17 @@ async function loadSession($: EngineInterface, isFinal = true): Promise<boolean>
 }
 
 // The app's servers may connect after the session starts: the first read is
-// retried, waiting longer each time, about a minute in all; the last try
-// shows what failed.
-const SESSION_RETRIES_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000]
+// retried, waiting longer each time, half a minute in all; the last try
+// shows what failed. Four reads at most: other mods count five failed calls
+// in a row as a loop.
+const SESSION_RETRIES_MS = [2_000, 8_000, 20_000]
+
+// The tools that change what the app's servers report: Remote Control, the
+// worktree, the folder and the connectors. A turn that used none of them
+// leaves the servers' answer as it was.
+const SESSION_TOOLS = /^(mcp__ccd_(session_mgmt|connectors|directory)__|EnterWorktree$|ExitWorktree$)/
+let isInTurn = false
+let isSessionTouched = false
 
 async function loadSessionAtStart($: EngineInterface): Promise<void> {
   for (const wait of SESSION_RETRIES_MS) {
@@ -1051,9 +1065,30 @@ export const register: Register = on => {
 
   // Each main turn may switch the branch, the folder or Remote Control: the
   // session is read again as it ends, without holding the turn up.
+  // The app's servers are asked again only when the turn used a tool that
+  // changes their answer, or when they could not be read before.
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) {
+      isInTurn = true
+      isSessionTouched = false
+    }
+    return next(e)
+  })
+
+  on('tool.call', async ($, e, next) => {
+    if (isInTurn && SESSION_TOOLS.test(e.tool)) isSessionTouched = true
+    return next(e)
+  })
+
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
-    if (e.agentId === undefined) void loadSession($).catch(() => undefined)
+    if (e.agentId === undefined) {
+      isInTurn = false
+      const view = await read($, session)
+      const withServers = isSessionTouched || Boolean(view.remoteError || view.connectorsError)
+      isSessionTouched = false
+      void loadSession($, true, withServers).catch(() => undefined)
+    }
     return result
   })
 

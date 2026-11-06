@@ -41,7 +41,7 @@ Lo que enseña la barra de sesión de la app de escritorio, para que puedas ocul
 ### Conectores
 Los servidores MCP de la sesión: primero los conectados, con cuántas herramientas tiene cada uno (`engram · 19 herramientas`), y después los demás con su estado (`Gmail · needs_auth`).
 
-Entorno, Conectores y el control remoto se leen de los servidores MCP propios de la app de escritorio. Al empezar la sesión, si todavía no responden, el panel muestra «Leyendo la sesión…» y lo reintenta solo durante un minuto. Después vuelve a leer la sesión al terminar cada turno y al abrir cada desplegable, así que una rama que cambió durante el turno aparece sin hacer nada.
+Entorno, Conectores y el control remoto se leen de los servidores MCP propios de la app de escritorio. Al empezar la sesión, si todavía no responden, el panel muestra «Leyendo la sesión…» y lo reintenta solo durante medio minuto, cuatro lecturas como mucho. Al terminar cada turno vuelve a leer la carpeta y la rama con git, así que una rama que cambió durante el turno aparece sin hacer nada. A los servidores de la app solo les pregunta otra vez si el turno usó una herramienta que cambia su respuesta (control remoto, worktree, carpeta o conectores) o si la lectura anterior falló. Al abrir cada desplegable lo lee todo de nuevo. Cada pregunta a esos servidores les llega a los demás mods como una llamada a herramienta, por eso se hacen pocas.
 
 ### Actualizaciones
 Las librerías desactualizadas, en cuatro grupos:
