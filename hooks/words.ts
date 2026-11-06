@@ -235,3 +235,50 @@ export async function pool<T, R>(items: T[], limit: number, fn: (item: T) => Pro
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
   return out
 }
+
+// The project's health at a glance: one count per state that has any, in the
+// color of that state, most urgent first. What has not been read yet counts
+// nothing.
+export type Health = { label: string; count: number; color: string }
+
+export function healthOf(scan: Scan, audit: Audit, tasks: number): Health[] {
+  const upgrades = scan.status === 'done' ? scan.upgrades : []
+  const vulns = audit.status === 'done' ? audit.findings.reduce((n, f) => n + f.vulns.length, 0) : 0
+  const count = (group: Group) => upgrades.filter(u => u.group === group).length
+  const parts: Health[] = [
+    { label: vulns === 1 ? 'vulnerabilidad' : 'vulnerabilidades', count: vulns, color: audit.status === 'done' && vulns > 0 ? vulnsColor(audit) : PALETTE.error },
+    { label: count('blocked') === 1 ? 'bloqueada' : 'bloqueadas', count: count('blocked'), color: PALETTE.error },
+    { label: count('review') === 1 ? 'mayor' : 'mayores', count: count('review'), color: PALETTE.waiting },
+    { label: 'de Expo', count: count('expo'), color: PALETTE.info },
+    { label: count('bump') === 1 ? 'trivial' : 'triviales', count: count('bump'), color: PALETTE.done },
+    { label: tasks === 1 ? 'pendiente' : 'pendientes', count: tasks, color: PALETTE.muted },
+  ]
+  return parts.filter(p => p.count > 0)
+}
+
+// The health as one rounded bar, a segment per state as wide as its share,
+// with a hairline gap between segments. No text: it reads the same on a light
+// or a dark pane. An empty health is one green bar: nothing waits.
+export const HEALTH_SIZE = { width: 240, height: 8 }
+
+export function healthSvg(parts: Health[], width = HEALTH_SIZE.width, height = HEALTH_SIZE.height): string {
+  const total = parts.reduce((n, p) => n + p.count, 0)
+  const segments = total === 0 ? [{ count: 1, color: PALETTE.done }] : parts
+  const sum = segments.reduce((n, p) => n + p.count, 0)
+  const gap = segments.length > 1 ? 2 : 0
+  const room = width - gap * (segments.length - 1)
+  let x = 0
+  const rects = segments.map((p, i) => {
+    // The last segment takes what rounding left, so the bar ends flush.
+    const w = i === segments.length - 1 ? width - x : Math.max(1, Math.round((room * p.count) / sum))
+    const rect = `<rect x="${x}" y="0" width="${w}" height="${height}" fill="${p.color}"/>`
+    x += w + gap
+    return rect
+  })
+  const r = height / 2
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">` +
+    `<clipPath id="bar"><rect width="${width}" height="${height}" rx="${r}" ry="${r}"/></clipPath>` +
+    `<g clip-path="url(#bar)">${rects.join('')}</g></svg>`
+  )
+}

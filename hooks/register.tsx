@@ -56,7 +56,7 @@ import {
 } from './session'
 import type { Remote, SessionView, Task, Todos } from '../types'
 import { TODO_FILE, TOOL_ADD, TOOL_DONE, TOOL_LIST, TOOL_TEMPLATE, damagedPath, findTask, newTask, parseEntry, parseTodoFile, serializeTodos, templateArg, templateMatches, templatePrompt, todosColor, todosLabel, todosText, withExclude } from './todos'
-import { COMMAND, COMMAND_HELP, GROUPS, NARSIL_SIZE, PALETTE, PANE, TITLE, agoLabel, auditSummary, commandHelp, groupLabel, narsilSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, sortUpgrades, summaryOf, tail } from './words'
+import { COMMAND, COMMAND_HELP, GROUPS, HEALTH_SIZE, NARSIL_SIZE, PALETTE, PANE, TITLE, agoLabel, auditSummary, commandHelp, groupLabel, healthOf, healthSvg, narsilSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, sortUpgrades, summaryOf, tail } from './words'
 import { PARADA_CLARO, PARADA_OSCURO } from './narsil-art'
 
 // Change a tag when its type's fields change: it declines what an earlier
@@ -1242,6 +1242,16 @@ export const register: Register = on => {
       await update($, isUpgradeOpen, value => !value)
     }
 
+    // The look: each section a panel whose rounded border takes the color of
+    // its state, so the border says something; a group's head a band tinted
+    // with its color. Tints are the color at low
+    // alpha, so they sit on a light or a dark pane alike. The terminal keeps
+    // the borders and draws no tints.
+    const isRich = e.surface !== 'terminal'
+    const tint = (tone: string) => (isRich ? `${tone}1F` : undefined)
+    const panel = (tone: string) => ({ flexDirection: 'column' as const, borderStyle: 'round', borderColor: tone, paddingX: 1, marginTop: 1 })
+    const band = (tone: string) => ({ flexDirection: 'row' as const, gap: 1, ...(isRich ? { backgroundColor: tint(tone), paddingX: 1 } : {}) })
+
     // The pane's own head, as Narsil's band: a colored dot and its name,
     // centered across the pane.
     const head = (
@@ -1260,7 +1270,7 @@ export const register: Register = on => {
     // most needs you, and its count when it has one.
     const color = sectionColor(state)
     const section = (
-      <Box flexDirection="row" gap={1} marginTop={1}>
+      <Box flexDirection="row" gap={1}>
         <Text bold color={color}>
           ●
         </Text>
@@ -1285,7 +1295,8 @@ export const register: Register = on => {
     const knob = switchGlyph(view)
     const sessionSection = (
       <Box flexDirection="column">
-        <Box flexDirection="row" gap={1} marginTop={1}>
+        <Box key="panel-session" {...panel(view.isLoaded ? PALETTE.info : PALETTE.muted)}>
+        <Box flexDirection="row" gap={1}>
           <Text bold color={view.isLoaded ? PALETTE.info : PALETTE.muted}>
             ●
           </Text>
@@ -1330,7 +1341,9 @@ export const register: Register = on => {
             )}
           </Box>
         )}
-        <Box flexDirection="row" gap={1} marginTop={1}>
+        </Box>
+        <Box key="panel-connectors" {...panel(connectorsColor(view))}>
+        <Box flexDirection="row" gap={1}>
           <Text bold color={connectorsColor(view)}>
             ●
           </Text>
@@ -1356,6 +1369,7 @@ export const register: Register = on => {
             )}
           </Box>
         )}
+        </Box>
       </Box>
     )
 
@@ -1370,7 +1384,7 @@ export const register: Register = on => {
       await update($, isVulnsOpen, value => !value)
     }
     const vulnsSection = (
-      <Box flexDirection="row" gap={1} marginTop={1}>
+      <Box flexDirection="row" gap={1}>
         <Text bold color={vulnsColor(found)}>
           ●
         </Text>
@@ -1402,12 +1416,12 @@ export const register: Register = on => {
             const isShut = closed.has(key)
             return (
               <Box flexDirection="column" marginTop={1}>
-                <Box flexDirection="row" gap={1}>
+                <Box {...band(tone)}>
                   <Text color={tone}>●</Text>
                   <Button key={`group-${key}`} plain label={groupLabel(!isShut, SEVERITY_TITLE[severity], rows.length)} onPress={() => toggleGroup($, key)} />
                 </Box>
                 {!isShut && rows.map(({ finding, vuln }) => (
-                  <Box flexDirection="column">
+                  <Box key={`row-vuln-${finding.ecosystem}:${finding.name}@${finding.version}:${vuln.id}`} flexDirection="column" paddingX={isRich ? 1 : 0}>
                     <Button key={`vuln-${finding.ecosystem}:${finding.name}@${finding.version}:${vuln.id}`} plain label={`${finding.display ?? finding.name} ${finding.version}${finding.isDirect ? '' : ' · indirecta'} · ${vuln.id}`} onPress={press => copyRow($, vulnCopyText(finding, vuln), press.surface)} />
                     <Text dimColor wrap="truncate-end">
                       {'  '}
@@ -1452,8 +1466,8 @@ export const register: Register = on => {
       await addTodo($, entry.name, entry.content).catch(err => $.ui.toast(`No pude guardar Pendientes: ${errorText(err)}`))
     }
     const todosSection = (
-      <Box flexDirection="column">
-        <Box flexDirection="row" gap={1} marginTop={1}>
+      <Box key="panel-todos" {...panel(todosColor(list.tasks.length))}>
+        <Box flexDirection="row" gap={1}>
           <Text bold color={todosColor(list.tasks.length)}>
             ●
           </Text>
@@ -1464,7 +1478,7 @@ export const register: Register = on => {
             {list.error && <Text color={PALETTE.error}>{list.error}</Text>}
             {list.notice && <Text color={PALETTE.waiting}>{list.notice}</Text>}
             {list.tasks.map(t => (
-              <Box flexDirection="column">
+              <Box key={`row-todo-${t.id}`} flexDirection="column" paddingX={isRich ? 1 : 0}>
                 <Box flexDirection="row" gap={1}>
                   <Button key={`todo-done-${t.id}`} plain label="○" onPress={() => finish(t.id)} />
                   {t.content ? (
@@ -1500,15 +1514,44 @@ export const register: Register = on => {
       </Box>
     )
 
+    // Under the head, the project's health: one bar in the colors of what
+    // waits, then each count as a chip. Only once a scan has a result.
+    const health = healthOf(state, found, list.tasks.length)
+    const healthStrip =
+      state.status === 'done' || found.status === 'done' ? (
+        <Box key="health" flexDirection="column" alignItems="center" marginTop={1}>
+          {Svg && <Svg source={healthSvg(health)} alt="Salud del proyecto" width={HEALTH_SIZE.width} height={HEALTH_SIZE.height} />}
+          <Box flexDirection="row" flexWrap="wrap" justifyContent="center" columnGap={1} marginTop={isRich ? 1 : 0}>
+            {health.length === 0 ? (
+              <Text color={PALETTE.done}>Sin pendientes</Text>
+            ) : (
+              health.map(p => (
+                <Box key={`chip-${p.label}`} {...band(p.color)}>
+                  <Text bold color={p.color}>
+                    {p.count}
+                  </Text>
+                  <Text dimColor>{p.label}</Text>
+                </Box>
+              ))
+            )}
+          </Box>
+        </Box>
+      ) : null
+
     const frame = (body: JSX.Element) => (
       <Box flexDirection="column">
         {head}
         {picture}
+        {healthStrip}
         {sessionSection}
-        {section}
-        {isOpen ? body : null}
-        {vulnsSection}
-        {vulnsOpen ? vulnsBody : null}
+        <Box key="panel-upgrade" {...panel(color)}>
+          {section}
+          {isOpen ? body : null}
+        </Box>
+        <Box key="panel-vulns" {...panel(vulnsColor(found))}>
+          {vulnsSection}
+          {vulnsOpen ? vulnsBody : null}
+        </Box>
         {todosSection}
         {pullSection}
       </Box>
@@ -1574,7 +1617,7 @@ export const register: Register = on => {
           const isShut = closed.has(key)
           return (
             <Box flexDirection="column" marginTop={1}>
-              <Box flexDirection="row" gap={1}>
+              <Box {...band(g.color)}>
                 <Text color={g.color}>●</Text>
                 <Button key={`group-${key}`} plain label={groupLabel(!isShut, g.label, rows.length)} onPress={() => toggleGroup($, key)} />
               </Box>
@@ -1584,7 +1627,7 @@ export const register: Register = on => {
                 const line = g.group === 'blocked' ? { text: u.conflicts.join(' · '), color: PALETTE.error, isDim: false } : reasonLine(why)
                 const copy = upgradeCopyText(u, why?.status === 'done' ? why : undefined)
                 return (
-                  <Box flexDirection="column">
+                  <Box key={`row-upgrade-${u.ecosystem}:${u.name}`} flexDirection="column" paddingX={isRich ? 1 : 0}>
                     <Button key={`upgrade-${u.ecosystem}:${u.name}`} plain label={upgradeLine(u, state.ecosystems.length > 1 ? adapterOf(u.ecosystem).label : undefined, fixes(u))} onPress={press => copyRow($, copy, press.surface)} />
                     {line && (
                       <Text color={line.color} dimColor={line.isDim}>

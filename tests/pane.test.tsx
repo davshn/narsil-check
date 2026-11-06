@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { GROUPS, NARSIL_SIZE, PALETTE, commandHelp, sectionColor, sectionLabel } from '../hooks/words'
+import { GROUPS, HEALTH_SIZE, NARSIL_SIZE, PALETTE, commandHelp, healthOf, healthSvg, sectionColor, sectionLabel } from '../hooks/words'
 import { PARADA_CLARO, PARADA_OSCURO } from '../hooks/narsil-art'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
@@ -158,5 +158,56 @@ test('/narsil-check upgrade opens the pane, unfolded; anything else answers with
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Button', text: /Actualizaciones/ }))?.text).toBe('▾ Actualizaciones · 1')
+  await ui.unmount()
+})
+
+test("the project's health counts each state that has any, most urgent first", () => {
+  const scan = { status: 'done' as const, upgrades: [up('bump'), up('bump'), up('review'), up('blocked')], held: 0, checked: 9, failed: 0, at: 0, ecosystems: ['npm' as const] }
+  const vuln = { id: 'GHSA-1', summary: 's', severity: 'high' as const, aliases: [] }
+  const audit = { status: 'done' as const, findings: [{ name: 'qs', ecosystem: 'npm' as const, version: '1.0.0', isDirect: false, vulns: [vuln, { ...vuln, id: 'GHSA-2' }] }], checked: 9, at: 0 }
+  expect(healthOf(scan, audit as never, 1)).toEqual([
+    { label: 'vulnerabilidades', count: 2, color: PALETTE.error },
+    { label: 'bloqueada', count: 1, color: PALETTE.error },
+    { label: 'mayor', count: 1, color: PALETTE.waiting },
+    { label: 'triviales', count: 2, color: PALETTE.done },
+    { label: 'pendiente', count: 1, color: PALETTE.muted },
+  ])
+  // Nothing read yet counts nothing.
+  expect(healthOf({ status: 'scanning' }, { status: 'scanning' } as never, 0)).toEqual([])
+})
+
+test('the health bar gives each state a share of one rounded bar, and an empty health is all green', () => {
+  const bar = healthSvg([
+    { label: 'bloqueada', count: 1, color: PALETTE.error },
+    { label: 'triviales', count: 3, color: PALETTE.done },
+  ])
+  expect(bar).toContain(`width="${HEALTH_SIZE.width}" height="${HEALTH_SIZE.height}"`)
+  expect(bar).toContain(`rx="${HEALTH_SIZE.height / 2}"`)
+  // 240 wide, a 2 gap: 238 split 1:3, the last segment flush with the end.
+  expect(bar).toContain(`<rect x="0" y="0" width="60" height="8" fill="${PALETTE.error}"/>`)
+  expect(bar).toContain(`<rect x="62" y="0" width="178" height="8" fill="${PALETTE.done}"/>`)
+  expect(healthSvg([])).toContain(`<rect x="0" y="0" width="240" height="8" fill="${PALETTE.done}"/>`)
+})
+
+test('each section is a panel bordered in the color of its state; the desktop tints group heads and counts, the terminal keeps borders alone', async ($, on) => {
+  project(on)
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+
+  let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  // One trivial upgrade: the upgrade panel is green.
+  expect((await ui.find({ type: 'Box', key: 'panel-upgrade' }))?.props).toMatchObject({ borderStyle: 'round', borderColor: PALETTE.done })
+  expect((await ui.find({ type: 'Box', key: 'panel-todos' }))?.props.borderColor).toBe(PALETTE.muted)
+  const svgs = await ui.findAll({ type: 'Svg' })
+  expect(svgs.map(s => s.props.alt)).toEqual(['Narsil bebé', 'Salud del proyecto'])
+  expect((await ui.find({ type: 'Box', key: 'chip-trivial' }))?.props.backgroundColor).toBe(`${PALETTE.done}1F`)
+  expect((await ui.find({ type: 'Box', key: 'row-upgrade-npm:zod' }))?.props.paddingX).toBe(1)
+  await ui.unmount()
+
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await ui.find({ type: 'Box', key: 'panel-upgrade' }))?.props.borderColor).toBe(PALETTE.done)
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  expect((await ui.find({ type: 'Box', key: 'chip-trivial' }))?.props.backgroundColor).toBeUndefined()
+  expect((await ui.find({ type: 'Box', key: 'row-upgrade-npm:zod' }))?.props.paddingX).toBe(0)
   await ui.unmount()
 })
