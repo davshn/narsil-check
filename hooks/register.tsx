@@ -313,7 +313,16 @@ async function targetPeers($: EngineInterface, name: string, version: string): P
 async function youngConflicts($: EngineInterface, upgrades: Upgrade[]): Promise<Map<Upgrade, string[]>> {
   const young = new Map<Upgrade, string[]>()
   if (!(await $.fs.exists('pnpm-lock.yaml'))) return young
-  const text = async (path: string) => ((await $.fs.exists(path)) ? await $.fs.read(path).catch(() => undefined) : undefined)
+  // The policy as HEAD holds it: CI installs from the commit, and the PR
+  // carries package.json and the lockfile alone, so an exclusion added in the
+  // worktree (pnpm may write one while installing) never reaches CI. Outside
+  // git, the file as it is.
+  const text = async (path: string) => {
+    const head = await $.process.run(['git', '--no-pager', 'show', `HEAD:${path}`], { timeoutMs: GIT_MS }).catch(() => undefined)
+    if (head?.exitCode === 0) return head.stdout
+    if (head && /does not exist in|exists on disk, but not in/.test(head.stderr)) return undefined
+    return (await $.fs.exists(path)) ? await $.fs.read(path).catch(() => undefined) : undefined
+  }
   const { minutes, exclude } = releaseAgeOf({ workspace: await text(WORKSPACE), npmrc: await text(NPMRC), manifest: await readJson($, MANIFEST) })
   if (minutes <= 0) return young
   const now = Date.now()

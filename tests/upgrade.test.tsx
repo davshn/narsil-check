@@ -847,3 +847,40 @@ test('in a pnpm project, an upgrade published within minimumReleaseAge is blocke
   expect(ran.filter(argv => argv[0] === 'pnpm')).toEqual([['pnpm', 'add', '-D', 'typescript@~5.9.3']])
   await ui.unmount()
 })
+
+test('an exclusion only the worktree holds, not HEAD, blocks nothing less: the PR carries no pnpm-workspace.yaml, so CI never sees it', async ($, on) => {
+  const { 'package-lock.json': _, ...rest } = FILES
+  const files = { ...rest, 'pnpm-lock.yaml': 'lockfileVersion: 9.0\n', 'pnpm-workspace.yaml': 'minimumReleaseAgeExclude:\n  - zod@3.25.1\n' }
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  project(on, files, LATEST, [], {
+    'https://registry.npmjs.org/zod': JSON.stringify({ time: { '3.25.1': hourAgo } }),
+    'https://registry.npmjs.org/typescript': JSON.stringify({ time: { '5.9.3': '2020-01-01T00:00:00Z' } }),
+  })
+  // HEAD's pnpm-workspace.yaml has no exclusions (the host answers it empty).
+  host(on)
+  on('ui.toast', () => ({ value: undefined }))
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /^Bloqueada/ }))?.text).toBe('Bloqueada (1)')
+  await ui.unmount()
+})
+
+test('outside git, the policy is read from the files as they are', async ($, on) => {
+  const { 'package-lock.json': _, ...rest } = FILES
+  const files = { ...rest, 'pnpm-lock.yaml': 'lockfileVersion: 9.0\n', 'pnpm-workspace.yaml': 'minimumReleaseAgeExclude:\n  - zod@3.25.1\n' }
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  project(on, files, LATEST, [], {
+    'https://registry.npmjs.org/zod': JSON.stringify({ time: { '3.25.1': hourAgo } }),
+    'https://registry.npmjs.org/typescript': JSON.stringify({ time: { '5.9.3': '2020-01-01T00:00:00Z' } }),
+  })
+  host(on, 'git --no-pager show HEAD:')
+  on('ui.toast', () => ({ value: undefined }))
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^Bloqueada/ })).toBeUndefined()
+  await ui.unmount()
+})
