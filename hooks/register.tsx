@@ -350,24 +350,27 @@ async function npmTimes($: EngineInterface, name: string, viewer: string, versio
   }
 }
 
+// A date a registry gave, or undefined for anything that is not one.
+const dateOf = (text: unknown) => (typeof text === 'string' && !Number.isNaN(Date.parse(text)) ? text : undefined)
+
 // When `version` of an upgrade's package was published, or undefined when
 // its registry cannot say. A date never changes once published, so it is
-// kept for good.
+// kept for good; only a date is kept, so an answer that is not one is asked
+// again on the next scan.
 async function releasedAt($: EngineInterface, ecosystem: Ecosystem, name: string, version: string, viewer: string): Promise<string | undefined> {
   const key = ecosystem === 'npm' ? `published:${name}@${version}` : `published:${ecosystem}:${name}@${version}`
-  const cached = (await $.store.get(key)) as string | undefined
+  const cached = dateOf(await $.store.get(key))
   if (cached !== undefined) return cached
   let published: string | undefined
   if (ecosystem === 'npm') {
-    const time = (await npmTimes($, name, viewer, version))?.[version]
-    published = typeof time === 'string' ? time : undefined
+    published = dateOf((await npmTimes($, name, viewer, version))?.[version])
   } else {
     const adapter = adapterOf(ecosystem)
     for (const url of adapter.releasedUrls?.(name, version) ?? []) {
       const res = await $.http.fetch(url, { headers: adapter.headers ?? {} }).catch(() => undefined)
       if (!res?.ok) continue
       try {
-        published = adapter.releasedOf?.(res.text, res.headers)
+        published = dateOf(adapter.releasedOf?.(res.text, res.headers))
       } catch {
         published = undefined
       }
@@ -378,39 +381,54 @@ async function releasedAt($: EngineInterface, ecosystem: Ecosystem, name: string
   return published
 }
 
+// When the mod first saw `version`, for one whose publication date cannot
+// be read: a version is never younger than the moment it was first seen, so
+// a day after that it has been published a day at least. Kept for good.
+async function firstSeen($: EngineInterface, ecosystem: Ecosystem, name: string, version: string, now: number): Promise<number> {
+  const key = `seen:${ecosystem}:${name}@${version}`
+  const seen = await $.store.get(key)
+  if (typeof seen === 'number' && seen <= now) return seen
+  await $.store.set(key, now)
+  return now
+}
+
 // Why a version the Expo SDK pins must wait: its range (`~5.0.2`) goes in as
-// the newest stable version that meets it, which must be a day old. A range
-// no published version meets, or a date that cannot be read, waits too.
-async function expoAgeConflict($: EngineInterface, u: Upgrade, viewer: string, now: number): Promise<string | undefined> {
+// the newest stable version that meets it, which must have waited as any
+// npm upgrade does. A date that cannot be read waits from when it was first
+// seen; a range no published version meets waits until one does.
+async function expoAgeConflict($: EngineInterface, u: Upgrade, viewer: string, now: number, minutes: number, who: 'pnpm' | 'narsil'): Promise<string | undefined> {
   const times = await npmTimes($, u.name, viewer)
   const target = Object.keys(times ?? {})
     .map(text => ({ text, version: parseVersion(text) }))
     .filter((v): v is { text: string; version: Version } => v.version !== undefined && v.version.pre === '' && satisfies(v.version, u.latest))
     .sort((a, b) => compare(b.version, a.version))[0]
-  const published = target ? times?.[target.text] : undefined
-  const why = ageConflict(typeof published === 'string' ? published : undefined, now, RELEASE_AGE, 'narsil')
+  const published = target ? dateOf(times?.[target.text]) : undefined
+  const seen = target && !published ? await firstSeen($, 'npm', u.name, target.text, now) : undefined
+  const why = ageConflict(published, now, minutes, who, seen)
   return why && `El SDK de Expo pide ${target?.text ?? u.latest} (npx expo install --fix). ${why}`
 }
 
 // The upgrades too young to go up, each with why: every ecosystem waits 24
 // hours after a version is published, and a pnpm project its
 // minimumReleaseAge when that is longer. A version whose publication date
-// cannot be read waits too.
+// cannot be read waits from when the mod first saw it.
 async function youngConflicts($: EngineInterface, upgrades: Upgrade[]): Promise<Map<Upgrade, string[]>> {
   const young = new Map<Upgrade, string[]>()
   const pnpm = await releaseMinutes($)
   const viewer = (await $.fs.exists('pnpm-lock.yaml')) ? 'pnpm' : 'npm'
   const now = Date.now()
   await pool(upgrades, CONCURRENCY, async u => {
+    const isPnpm = u.ecosystem === 'npm' && pnpm >= RELEASE_AGE
+    const minutes = isPnpm ? pnpm : RELEASE_AGE
+    const who = isPnpm ? 'pnpm' : 'narsil'
     if (u.group === 'expo') {
-      const why = await expoAgeConflict($, u, viewer, now)
+      const why = await expoAgeConflict($, u, viewer, now, minutes, who)
       if (why) young.set(u, [why])
       return
     }
-    const isPnpm = u.ecosystem === 'npm' && pnpm >= RELEASE_AGE
-    const minutes = isPnpm ? pnpm : RELEASE_AGE
     const published = await releasedAt($, u.ecosystem, u.name, u.latest, viewer)
-    const why = ageConflict(published, now, minutes, isPnpm ? 'pnpm' : 'narsil')
+    const seen = published ? undefined : await firstSeen($, u.ecosystem, u.name, u.latest, now)
+    const why = ageConflict(published, now, minutes, who, seen)
     if (why) young.set(u, [why])
   })
   return young

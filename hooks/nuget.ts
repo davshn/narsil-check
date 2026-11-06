@@ -79,7 +79,12 @@ export const NUGET: Adapter = {
   lockfiles: [],
   parse: parseNuget,
   latestUrl: name => `https://api.nuget.org/v3-flatcontainer/${name.toLowerCase()}/index.json`,
-  releasedUrls: (name, version) => [`https://api.nuget.org/v3/registration5-semver1/${name.toLowerCase()}/${version.toLowerCase()}.json`],
+  // The SemVer 1 hive first; a package with SemVer 2 versions only is in the
+  // SemVer 2 one, served gzip-encoded.
+  releasedUrls: (name, version) => [
+    `https://api.nuget.org/v3/registration5-semver1/${name.toLowerCase()}/${version.toLowerCase()}.json`,
+    `https://api.nuget.org/v3/registration5-gz-semver2/${name.toLowerCase()}/${version.toLowerCase()}.json`,
+  ],
   releasedOf: text => {
     const at = (JSON.parse(text) as { published?: unknown }).published
     return typeof at === 'string' ? at : undefined

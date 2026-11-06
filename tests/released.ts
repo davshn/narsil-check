@@ -14,7 +14,7 @@ const RELEASED = [
   /^https:\/\/pub\.dev\/api\/packages\/[^/]+\/versions\/[^/]+$/,
   /^https:\/\/api\.nuget\.org\/v3\/registration5-semver1\//,
   /^https:\/\/rubygems\.org\/api\/v2\/rubygems\//,
-  /^https:\/\/api\.github\.com\/repos\/[^/]+\/[^/]+\/commits\//,
+  /^https:\/\/api\.github\.com\/repos\/[^/]+\/[^/]+\/releases\/tags\//,
   /\.pom$/,
 ]
 
@@ -29,7 +29,7 @@ export function released(url: string, young: Record<string, string> = {}): Respo
     Time: at,
     published: at,
     created_at: at,
-    commit: { committer: { date: at } },
+    published_at: at,
   })
   return { value: { status: 200, ok: true, headers: { 'last-modified': new Date(at).toUTCString() }, text } }
 }

@@ -916,7 +916,32 @@ test('a publication date nobody can read blocks the upgrade', async ($, on) => {
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Button', text: /Bloqueada/ }))?.text).toBe('▾ Bloqueada (1)')
-  expect((await ui.find({ type: 'Text', text: /minimumReleaseAge/ }))?.text).toBe('  No pude leer cuándo se publicó: pnpm espera 24 h para instalarla (minimumReleaseAge)')
+  expect((await ui.find({ type: 'Text', text: /minimumReleaseAge/ }))?.text).toBe('  No pude leer cuándo se publicó y la vi por primera vez hace 0 min: pnpm espera 24 h para instalarla (minimumReleaseAge)')
+  await ui.unmount()
+})
+
+test('a version whose date nobody can read goes up a day after the mod first saw it, and an answer that is not a date is never kept', async ($, on) => {
+  const { 'package-lock.json': _, ...rest } = FILES
+  const files = { ...rest, 'pnpm-lock.yaml': 'lockfileVersion: 9.0\n' }
+  const store = project(on, files, LATEST, [], {
+    // zod's packument gives no date for 3.25.1; an old scan kept an answer that is not a date.
+    'https://registry.npmjs.org/zod': JSON.stringify({ version: '3.25.1', time: { '3.25.1': 'not a date' } }),
+    'https://registry.npmjs.org/typescript': JSON.stringify({ time: { '5.9.3': '2020-01-01T00:00:00Z' } }),
+    'https://registry.npmjs.org/react': JSON.stringify({ time: { '19.2.0': '2020-01-01T00:00:00Z' } }),
+  })
+  store.set('published:zod@3.25.1', 'garbage')
+  store.set('seen:npm:zod@3.25.1', Date.now() - 25 * 60 * 60 * 1000)
+  host(on)
+  on('ui.toast', () => ({ value: undefined }))
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  // Seen 25 hours ago: it has been published a day at least.
+  expect(await ui.find({ type: 'Button', text: /Bloqueada/ })).toBeUndefined()
+  expect((await ui.find({ type: 'Button', text: /^zod/ }))?.text).toBe('zod 3.22.4 → 3.25.1')
+  // Neither the old garbage nor the new one is kept as a date.
+  expect(store.get('published:zod@3.25.1')).toBe('garbage')
   await ui.unmount()
 })
 

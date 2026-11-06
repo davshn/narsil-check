@@ -166,17 +166,18 @@ export const SWIFTPM: Adapter = {
   parse: parseSwiftpm,
   latestUrl: name => name,
   latestCommand: name => ['git', 'ls-remote', '--tags', '--refs', name],
-  // A package is a git repository: on GitHub, the date of the commit its
-  // tag points to (the tag spelled bare or with a v). Elsewhere no date
-  // is known, so the wait blocks it.
+  // A package is a git repository: on GitHub, when its release for the tag
+  // was published (the tag spelled bare or with a v), a date GitHub sets and
+  // the author cannot backdate as a commit's. A tag with no release, or a
+  // package off GitHub, has no date: it waits from when the mod first saw it.
   releasedUrls: (name, version) => {
     const repo = /github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?\/?$/.exec(name)
     if (!repo) return []
-    const base = `https://api.github.com/repos/${repo[1]}/${repo[2]}/commits`
+    const base = `https://api.github.com/repos/${repo[1]}/${repo[2]}/releases/tags`
     return [`${base}/${encodeURIComponent(version)}`, `${base}/v${encodeURIComponent(version)}`]
   },
   releasedOf: text => {
-    const at = (JSON.parse(text) as { commit?: { committer?: { date?: unknown } } }).commit?.committer?.date
+    const at = (JSON.parse(text) as { published_at?: unknown }).published_at
     return typeof at === 'string' ? at : undefined
   },
   latestOf: latestTag,

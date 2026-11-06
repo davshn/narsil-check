@@ -227,7 +227,7 @@ test('a crate published less than a day ago waits, and one whose date crates.io 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('4 para actualizar de 6 · 2 bloqueadas · 1 mayores · 1 triviales')
   const reasons = (await ui.findAll({ type: 'Text', text: /Narsil Check espera/ })).map(t => t.text)
-  expect(reasons).toEqual(['  Publicada hace 1 h: Narsil Check espera 24 h antes de subirla', '  No pude leer cuándo se publicó: Narsil Check espera 24 h antes de subirla'])
+  expect(reasons).toEqual(['  Publicada hace 1 h: Narsil Check espera 24 h antes de subirla', '  No pude leer cuándo se publicó y la vi por primera vez hace 0 min: Narsil Check espera 24 h antes de subirla'])
 
   // The button takes only tokio, the one old enough.
   await ui.press({ key: 'upgrade-bumps' })

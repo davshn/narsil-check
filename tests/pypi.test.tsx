@@ -163,10 +163,11 @@ function python(on: On, latest: Record<string, string>, web: Record<string, stri
     return { value: undefined }
   })
   on('http.fetch', (_, e) => {
-    const date = released(e.url)
-    if (date) return date
+    // A page the test names wins, as Django's GitHub release for its notes.
     const page = web[e.url]
     if (page !== undefined) return { value: { status: 200, ok: true, headers: {}, text: page } }
+    const date = released(e.url)
+    if (date) return date
     const name = decodeURIComponent(e.url.replace('https://pypi.org/pypi/', '').replace(/\/json$/, ''))
     const version = latest[name]
     const urls = name === 'Django' ? { Source: 'https://github.com/django/django' } : {}

@@ -80,14 +80,14 @@ En todos los ecosistemas, una versión publicada hace menos de 24 horas va a **B
 | Go | `Time` del proxy de Go |
 | Cargo | `created_at` de crates.io |
 | Pub | `published` de pub.dev |
-| NuGet | `published` del registro de NuGet |
+| NuGet | `published` del registro de NuGet (el de SemVer 1, y si no está, el de SemVer 2) |
 | RubyGems | `created_at` de rubygems.org |
 | Gradle y Maven | la fecha del POM (`Last-Modified`) en Maven Central, Google Maven o el Gradle Plugin Portal |
-| SwiftPM | la fecha del commit del tag, en GitHub. En otro servidor git no hay fecha, así que se bloquea |
+| SwiftPM | cuándo GitHub publicó el *release* de ese tag. Es una fecha que pone GitHub, no la del commit, que el autor podría falsificar |
 
-No hay excepciones: una versión cuya fecha no se puede leer también queda bloqueada, con *"No pude leer cuándo se publicó"*. Cuando la versión cumple el día, deja de estar bloqueada en el siguiente escaneo.
+No hay excepciones: nada sube sin prueba de que esperó. Cuando la fecha no se puede leer (un tag sin *release*, un paquete Swift fuera de GitHub, un registro que no responde), la prueba es **cuándo vio el panel esa versión por primera vez**: una versión nunca es más nueva que el momento en que apareció, así que 24 horas después ya lleva al menos un día publicada. Mientras tanto queda bloqueada con *"No pude leer cuándo se publicó y la vi por primera vez hace 3 h: Narsil Check espera 24 h antes de subirla"*. Así una librería sin fecha nunca queda bloqueada para siempre. Una respuesta que no es una fecha nunca se guarda, así que el siguiente escaneo vuelve a preguntar. Cuando la versión cumple el día, deja de estar bloqueada en el siguiente escaneo.
 
-En un proyecto Expo, una librería que el SDK fija se sube con `npx expo install --fix`, que instala la versión más nueva que cumple el rango del SDK. Esa versión también espera el día; mientras tanto la librería va a **Bloqueada** con la versión y el comando: *"El SDK de Expo pide 17.0.8 (npx expo install --fix). Publicada hace 1 h: …"*.
+En un proyecto Expo, una librería que el SDK fija se sube con `npx expo install --fix`, que instala la versión más nueva que cumple el rango del SDK. Esa versión también espera el día, o el `minimumReleaseAge` de pnpm si es más largo; mientras tanto la librería va a **Bloqueada** con la versión y el comando: *"El SDK de Expo pide 17.0.8 (npx expo install --fix). Publicada hace 1 h: …"*.
 
 En un proyecto con pnpm cuenta además su `minimumReleaseAge`, si es más largo que un día, con el aviso *"pnpm espera 48 h para instalarla (minimumReleaseAge)"*. Si se instalara antes, el `pnpm install --frozen-lockfile` del CI la rechazaría. El valor se lee de `pnpm-workspace.yaml` (o de `minimum-release-age` en `.npmrc`) tal como está en `HEAD`, porque eso es lo que ve el CI. Un valor menor que un día no baja la espera. `minimumReleaseAgeExclude` se ignora, esté en `HEAD` o sin commit.
 

@@ -26,7 +26,11 @@ test('each registry says where and when a version was published', () => {
   expect(PUB.releasedUrls?.('http', '1.2.0')).toEqual(['https://pub.dev/api/packages/http/versions/1.2.0'])
   expect(PUB.releasedOf?.(JSON.stringify({ version: '1.2.0', published: '2024-01-16T22:46:38.816321Z' }), {})).toBe('2024-01-16T22:46:38.816321Z')
 
-  expect(NUGET.releasedUrls?.('Newtonsoft.Json', '13.0.3')).toEqual(['https://api.nuget.org/v3/registration5-semver1/newtonsoft.json/13.0.3.json'])
+  // The SemVer 1 hive, then the SemVer 2 one for a package with SemVer 2 versions only.
+  expect(NUGET.releasedUrls?.('Newtonsoft.Json', '13.0.3')).toEqual([
+    'https://api.nuget.org/v3/registration5-semver1/newtonsoft.json/13.0.3.json',
+    'https://api.nuget.org/v3/registration5-gz-semver2/newtonsoft.json/13.0.3.json',
+  ])
   expect(NUGET.releasedOf?.(JSON.stringify({ published: '2023-03-08T07:42:54.647+00:00' }), {})).toBe('2023-03-08T07:42:54.647+00:00')
 
   expect(RUBYGEMS.releasedUrls?.('rails', '7.1.3')).toEqual(['https://rubygems.org/api/v2/rubygems/rails/versions/7.1.3.json'])
@@ -42,12 +46,13 @@ test('each registry says where and when a version was published', () => {
   expect(MAVEN.releasedOf?.('<project/>', { 'last-modified': 'Thu, 20 Jun 2024 10:25:00 GMT' })).toBe('2024-06-20T10:25:00.000Z')
   expect(MAVEN.releasedOf?.('<project/>', {})).toBeUndefined()
 
-  // SwiftPM: on GitHub, the commit the tag points to, spelled bare or with a v.
+  // SwiftPM: on GitHub, when the tag's release was published (a date GitHub
+  // sets, not the commit's, which the author can backdate), bare or with a v.
   expect(SWIFTPM.releasedUrls?.('https://github.com/Alamofire/Alamofire.git', '5.9.1')).toEqual([
-    'https://api.github.com/repos/Alamofire/Alamofire/commits/5.9.1',
-    'https://api.github.com/repos/Alamofire/Alamofire/commits/v5.9.1',
+    'https://api.github.com/repos/Alamofire/Alamofire/releases/tags/5.9.1',
+    'https://api.github.com/repos/Alamofire/Alamofire/releases/tags/v5.9.1',
   ])
-  expect(SWIFTPM.releasedOf?.(JSON.stringify({ commit: { committer: { date: '2024-03-31T01:21:38Z' } } }), {})).toBe('2024-03-31T01:21:38Z')
+  expect(SWIFTPM.releasedOf?.(JSON.stringify({ tag_name: '5.9.1', published_at: '2024-03-31T01:22:33Z', created_at: '2024-03-31T01:21:38Z' }), {})).toBe('2024-03-31T01:22:33Z')
   // Off GitHub no date is known, so the wait blocks it.
   expect(SWIFTPM.releasedUrls?.('https://gitlab.com/x/y.git', '1.0.0')).toEqual([])
 })
@@ -58,6 +63,15 @@ test("a Go version lives at its major's module path, whatever path declared it",
   expect(majorPath('github.com/pkg/errors', 'v0.9.1')).toBe('github.com/pkg/errors')
   expect(majorPath('gopkg.in/yaml.v2', 'v3.0.1')).toBe('gopkg.in/yaml.v3')
   expect(GO.releasedUrls?.('github.com/BurntSushi/toml', '1.4.0')).toEqual(['https://proxy.golang.org/github.com/!burnt!sushi/toml/@v/v1.4.0.info'])
+})
+
+test('a version whose date cannot be read waits a day from when the mod first saw it', () => {
+  const now = Date.parse('2026-11-06T10:00:00Z')
+  const seen = (hours: number) => now - hours * 60 * 60 * 1000
+  expect(ageConflict(undefined, now, 1440, 'narsil', seen(3))).toBe('No pude leer cuándo se publicó y la vi por primera vez hace 3 h: Narsil Check espera 24 h antes de subirla')
+  expect(ageConflict(undefined, now, 1440, 'narsil', seen(25))).toBeUndefined()
+  // A date read wins over when it was seen.
+  expect(ageConflict('2026-11-06T09:00:00Z', now, 1440, 'narsil', seen(30))).toBe('Publicada hace 1 h: Narsil Check espera 24 h antes de subirla')
 })
 
 test("the mod's own wait says so, in every ecosystem", () => {
