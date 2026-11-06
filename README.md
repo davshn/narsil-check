@@ -49,7 +49,7 @@ Las librerías desactualizadas, en cuatro grupos:
 | Grupo | Cuándo | Qué hacer |
 | --- | --- | --- |
 | **Fuera del SDK de Expo** | La versión instalada no cumple el rango que fija el SDK de Expo del proyecto. | `npx expo install --fix` |
-| **Bloqueada** | Algo impide subirla sola: una dependencia que no la acepta, un plugin del compilador atado a la versión actual o un comentario que la fija a propósito. El motivo aparece debajo. | Resolver primero lo que la bloquea. |
+| **Bloqueada** | Algo impide subirla sola: una dependencia que no la acepta, un plugin del compilador atado a la versión actual, un comentario que la fija a propósito o una versión que pnpm todavía no instala por `minimumReleaseAge`. El motivo aparece debajo. | Resolver primero lo que la bloquea. |
 | **Versión mayor** | Hay una versión major nueva (o un salto de minor por debajo de 1.0.0). | Leer los cambios: pueden romper la API. |
 | **Solo subir la versión** | Hay un parche o una minor nueva. | Subir la versión. |
 
@@ -65,6 +65,8 @@ Solo en npm. Antes de clasificar una actualización, el panel hace tres comproba
 - **Versiones fijadas en el árbol**: si un paquete instalado, aunque no lo declares tú, fija la librería en una versión exacta, subirla dejaría dos copias. Por ejemplo, `typescript-eslint` 8.71.0 fija `@typescript-eslint/parser` 8.71.0: subir el parser a 8.72.1 hace que ESLint cargue el plugin dos veces ("Cannot redefine plugin"). No cuenta si quien la fija sube en el mismo lote a la misma versión, como la familia `@tailwindcss/*` con `tailwindcss`. Un rango que no es una versión exacta (`^8.53.0`) no se marca: una copia anidada ahí suele ser inofensiva. Esta comprobación usa `package-lock.json`, así que con yarn, pnpm o bun no se hace.
 
 Cualquier actualización con un conflicto, sea de parche, menor o mayor, va al grupo **Bloqueada**, con cada conflicto escrito debajo, y el botón **Actualizar las N** nunca la incluye. Un peer que el proyecto no tiene instalado no cuenta como conflicto: es npm quien lo añade. Los conflictos se comparan con las versiones instaladas ahora; si subes varias juntas, puede que el bloqueo se resuelva entre ellas.
+
+En un proyecto con pnpm, una versión publicada hace menos de lo que pide `minimumReleaseAge` también va a **Bloqueada**, por ejemplo con *"Publicada hace 3 h: pnpm espera 24 h para instalarla (minimumReleaseAge)"*. Si se instalara, el `pnpm install --frozen-lockfile` del CI la rechazaría. El valor se lee de `pnpm-workspace.yaml` (o de `minimum-release-age` en `.npmrc`). Si no está, se usa el de pnpm: 1440 minutos (un día) desde pnpm 11 y ninguno en pnpm 10, según el `packageManager` de `package.json`. Las librerías de `minimumReleaseAgeExclude` (por nombre, patrón con `*` o versión exacta) no esperan. Cuando la versión cumple la edad, deja de estar bloqueada en el siguiente escaneo.
 
 ### Versiones fijadas a propósito
 En cualquier ecosistema cuyo manifest admite comentarios (todos menos npm, cuyo `package.json` no los tiene), una librería se bloquea si un comentario dice que se mantiene a propósito, en la línea de su versión o en la de arriba. Cuentan las palabras *pin*, *pinned*, *hold*, *keep*, *freeze*, *do not upgrade* y, en español, *fijar*, *fijado*, *congelado* o *no actualizar*. El panel muestra el comentario como motivo:

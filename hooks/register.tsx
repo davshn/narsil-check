@@ -24,7 +24,7 @@ import type { Reason } from './explain'
 import { ADAPTERS, NPM, adapterOf, holdNote, manifestOf, manifestsOf, specChanges } from './ecosystems'
 import type { Adapter, Dep, Files } from './ecosystems'
 import { branchName, commitBody, commitTitle, isMainBranch, prBody, prUrlOf } from './git'
-import { EXPO_TABLE, LOCK, MANIFEST, expoTableUrl, installedFromManifest, installedOf, latestUrl, parseManifest, peerConflicts, pinConflicts, upgradeOf, versionUrl } from './npm'
+import { EXPO_TABLE, LOCK, MANIFEST, NPMRC, WORKSPACE, ageConflict, expoTableUrl, installedFromManifest, installedOf, isAgeExcluded, latestUrl, packumentUrl, parseManifest, peerConflicts, pinConflicts, publishedAt, releaseAgeOf, upgradeOf, versionUrl } from './npm'
 import type { Declared, Found, Installed } from './npm'
 import { baseOf, bumpOf, parseVersion, show } from './semver'
 import {
@@ -306,6 +306,36 @@ async function targetPeers($: EngineInterface, name: string, version: string): P
   return target
 }
 
+// The upgrades pnpm would refuse for being younger than its
+// minimumReleaseAge, each with why. Only in a pnpm project; a publication
+// date that cannot be read blocks nothing. A date never changes once
+// published, so it is kept for good.
+async function youngConflicts($: EngineInterface, upgrades: Upgrade[]): Promise<Map<Upgrade, string[]>> {
+  const young = new Map<Upgrade, string[]>()
+  if (!(await $.fs.exists('pnpm-lock.yaml'))) return young
+  const text = async (path: string) => ((await $.fs.exists(path)) ? await $.fs.read(path).catch(() => undefined) : undefined)
+  const { minutes, exclude } = releaseAgeOf({ workspace: await text(WORKSPACE), npmrc: await text(NPMRC), manifest: await readJson($, MANIFEST) })
+  if (minutes <= 0) return young
+  const now = Date.now()
+  await pool(upgrades, CONCURRENCY, async u => {
+    if (u.group === 'expo' || isAgeExcluded(u.name, u.latest, exclude)) return
+    const key = `published:${u.name}@${u.latest}`
+    let published = (await $.store.get(key)) as string | undefined
+    if (published === undefined) {
+      const page = await fetchText($, packumentUrl(u.name), { accept: 'application/json' }).catch(() => undefined)
+      try {
+        published = page ? publishedAt(page, u.latest) : undefined
+      } catch {
+        published = undefined
+      }
+      if (published) await $.store.set(key, published)
+    }
+    const why = ageConflict(published, now, minutes)
+    if (why) young.set(u, [why])
+  })
+  return young
+}
+
 // The SDK's table of native module ranges: the installed copy, else the one
 // published with the installed Expo version.
 async function expoTable($: EngineInterface, expo: string | undefined): Promise<Record<string, string> | undefined> {
@@ -551,6 +581,9 @@ async function scanNpm($: EngineInterface, isFresh: boolean): Promise<Scanned> {
       const target = await targetPeers($, u.name, u.latest)
       peers.set(u, target ? peerConflicts(u.name, target, installedMap) : [])
     })
+    // pnpm refuses a version younger than its minimumReleaseAge, and so does
+    // CI's frozen install: such an upgrade waits, blocked, until it is old enough.
+    const young = await youngConflicts($, upgrades)
     // The trivial upgrades the button installs together, until no pin
     // blocks one of them: a blocked one leaves the batch, which can block
     // a sibling it carried.
@@ -561,7 +594,7 @@ async function scanNpm($: EngineInterface, isFresh: boolean): Promise<Scanned> {
         const own = peers.get(u)
         const version = parseVersion(u.latest)
         if (own === undefined || !version) continue
-        u.conflicts = [...own, ...pinConflicts(u.name, version, lock, batch)]
+        u.conflicts = [...own, ...(young.get(u) ?? []), ...pinConflicts(u.name, version, lock, batch)]
         const group = u.conflicts.length > 0 ? 'blocked' : u.bump === 'major' ? 'review' : 'bump'
         if (group !== u.group) {
           u.group = group

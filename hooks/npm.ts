@@ -219,3 +219,77 @@ export function installedOf(declared: Declared, lock: unknown, fromModules?: str
   const text = fromModules ?? lockedVersion(lock, declared.name)
   return (text ? parseVersion(text) : undefined) ?? baseOf(declared.spec)
 }
+
+// pnpm's minimumReleaseAge: how many minutes a version must have been
+// published before pnpm installs it, and the packages exempt from the wait.
+// pnpm 11 and later wait one day unless pnpm-workspace.yaml or .npmrc says
+// otherwise; pnpm 10 waited for nothing.
+export const WORKSPACE = 'pnpm-workspace.yaml'
+export const NPMRC = '.npmrc'
+const PNPM_DEFAULT_AGE = 1440
+
+export type ReleaseAge = { minutes: number; exclude: string[] }
+
+export function releaseAgeOf(files: { workspace?: string; npmrc?: string; manifest?: unknown }): ReleaseAge {
+  const lines = (files.workspace ?? '').split(/\r?\n/)
+  const unquote = (text: string) => text.replace(/\s+#.*$/, '').trim().replace(/^(['"])(.*)\1$/, '$2')
+  const exclude: string[] = []
+  let minutes: number | undefined
+  for (let i = 0; i < lines.length; i++) {
+    const own = /^minimumReleaseAge:\s*(\d+)/.exec(lines[i]!)
+    if (own) minutes = Number(own[1])
+    if (!/^minimumReleaseAgeExclude:\s*$/.test(lines[i]!)) continue
+    for (let j = i + 1; j < lines.length; j++) {
+      const item = /^\s+-\s*(.+)$/.exec(lines[j]!)
+      if (item) exclude.push(unquote(item[1]!))
+      else if (lines[j]!.trim() && !lines[j]!.trim().startsWith('#')) break
+    }
+  }
+  if (minutes === undefined) {
+    const rc = /^\s*minimum-?release-?age\s*=\s*(\d+)/im.exec(files.npmrc ?? '')
+    if (rc) minutes = Number(rc[1])
+  }
+  if (minutes === undefined) {
+    const pinned = (files.manifest as { packageManager?: unknown } | undefined)?.packageManager
+    const major = typeof pinned === 'string' ? /^pnpm@(\d+)\./.exec(pinned)?.[1] : undefined
+    minutes = major !== undefined && Number(major) < 11 ? 0 : PNPM_DEFAULT_AGE
+  }
+  return { minutes, exclude }
+}
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+// Whether minimumReleaseAgeExclude lets `name@version` through: an entry is
+// a name, a pattern with *, or a name with versions joined by ||.
+export function isAgeExcluded(name: string, version: string, exclude: string[]): boolean {
+  return exclude.some(entry => {
+    const at = entry.indexOf('@', 1)
+    const pattern = at === -1 ? entry : entry.slice(0, at)
+    const re = new RegExp(`^${pattern.split('*').map(escapeRegExp).join('.*')}$`)
+    if (!re.test(name)) return false
+    return at === -1 || entry.slice(at + 1).split('||').some(v => v.trim() === version)
+  })
+}
+
+// The full record of a package, where the registry keeps each version's
+// publication time.
+export function packumentUrl(name: string): string {
+  return `https://registry.npmjs.org/${name.replace('/', '%2F')}`
+}
+
+export function publishedAt(text: string, version: string): string | undefined {
+  const time = (JSON.parse(text) as { time?: Record<string, unknown> }).time?.[version]
+  return typeof time === 'string' ? time : undefined
+}
+
+// Why pnpm would refuse a version published at `published`, or undefined
+// when it is old enough (or its date is unknown).
+export function ageConflict(published: string | undefined, now: number, minutes: number): string | undefined {
+  const at = published ? Date.parse(published) : NaN
+  if (Number.isNaN(at) || minutes <= 0) return undefined
+  const age = Math.max(0, Math.floor((now - at) / 60_000))
+  if (age >= minutes) return undefined
+  const span = (m: number) => (m >= 120 && m % 60 === 0 ? `${m / 60} h` : m >= 120 ? `${Math.floor(m / 60)} h` : `${m} min`)
+  const ago = age >= 60 ? `${Math.floor(age / 60)} h` : `${age} min`
+  return `Publicada hace ${ago}: pnpm espera ${span(minutes)} para instalarla (minimumReleaseAge)`
+}

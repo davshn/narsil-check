@@ -4,7 +4,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { baseOf, bumpOf, parseVersion, satisfies } from '../hooks/semver'
 import type { Version } from '../hooks/semver'
-import { installArgv, installedFromManifest, isExactPin, latestUrl, managerOf, parseManifest, peerConflicts, pinConflicts, rangeFor, upgradeOf } from '../hooks/npm'
+import { ageConflict, installArgv, installedFromManifest, isAgeExcluded, isExactPin, releaseAgeOf, latestUrl, managerOf, parseManifest, peerConflicts, pinConflicts, rangeFor, upgradeOf } from '../hooks/npm'
 import type { Installed } from '../hooks/npm'
 import { branchName, commitTitle, isMainBranch, prUrlOf } from '../hooks/git'
 import { specChanges } from '../hooks/ecosystems'
@@ -794,5 +794,56 @@ test('the button leaves out an upgrade a package in the tree pins', async ($, on
 
   await ui.press({ key: 'upgrade-bumps' })
   expect(ran.filter(argv => argv[0] === 'npm')).toEqual([['npm', 'install', '--save-dev', 'typescript@~5.9.3']])
+  await ui.unmount()
+})
+
+test("pnpm's minimumReleaseAge: one day by default, else what the workspace or .npmrc sets", () => {
+  expect(releaseAgeOf({}).minutes).toBe(1440)
+  expect(releaseAgeOf({ workspace: 'minimumReleaseAge: 0\n' }).minutes).toBe(0)
+  expect(releaseAgeOf({ workspace: 'overrides:\n  a: 1\nminimumReleaseAge: 10080 # a week\n' }).minutes).toBe(10080)
+  expect(releaseAgeOf({ npmrc: 'minimum-release-age=60\n' }).minutes).toBe(60)
+  // pnpm 10 waited for nothing unless told to.
+  expect(releaseAgeOf({ manifest: { packageManager: 'pnpm@10.18.0' } }).minutes).toBe(0)
+  expect(releaseAgeOf({ manifest: { packageManager: 'pnpm@12.6.0' } }).minutes).toBe(1440)
+  const { exclude } = releaseAgeOf({ workspace: "allowBuilds:\n  esbuild: true\nminimumReleaseAgeExclude:\n  - '@astrojs/markdown-satteri@0.3.2'\n  - astro\n  - \"@eslint/*\"\nother: 1\n" })
+  expect(exclude).toEqual(['@astrojs/markdown-satteri@0.3.2', 'astro', '@eslint/*'])
+})
+
+test('a version minimumReleaseAgeExclude lists, by name, pattern or version, is not held back', () => {
+  const exclude = ['astro', '@eslint/*', 'webpack@4.47.0 || 5.102.1']
+  expect(isAgeExcluded('astro', '7.4.7', exclude)).toBe(true)
+  expect(isAgeExcluded('@eslint/js', '9.0.0', exclude)).toBe(true)
+  expect(isAgeExcluded('webpack', '5.102.1', exclude)).toBe(true)
+  expect(isAgeExcluded('webpack', '5.103.0', exclude)).toBe(false)
+  expect(isAgeExcluded('playwright', '1.65.0', exclude)).toBe(false)
+})
+
+test('a version younger than minimumReleaseAge says how long it still waits', () => {
+  const now = Date.parse('2026-11-06T10:00:00Z')
+  expect(ageConflict('2026-11-06T07:00:00Z', now, 1440)).toBe('Publicada hace 3 h: pnpm espera 24 h para instalarla (minimumReleaseAge)')
+  expect(ageConflict('2026-11-06T09:50:00Z', now, 60)).toBe('Publicada hace 10 min: pnpm espera 60 min para instalarla (minimumReleaseAge)')
+  expect(ageConflict('2026-11-04T10:00:00Z', now, 1440)).toBeUndefined()
+  expect(ageConflict(undefined, now, 1440)).toBeUndefined()
+})
+
+test('in a pnpm project, an upgrade published within minimumReleaseAge is blocked and the button leaves it out', async ($, on) => {
+  const { 'package-lock.json': _, ...rest } = FILES
+  const files = { ...rest, 'pnpm-lock.yaml': 'lockfileVersion: 9.0\n', 'pnpm-workspace.yaml': 'minimumReleaseAgeExclude:\n  - lodash\n' }
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  project(on, files, LATEST, [], {
+    'https://registry.npmjs.org/zod': JSON.stringify({ time: { '3.25.1': hourAgo } }),
+    'https://registry.npmjs.org/typescript': JSON.stringify({ time: { '5.9.3': '2020-01-01T00:00:00Z' } }),
+  })
+  const ran = host(on)
+  on('ui.toast', () => ({ value: undefined }))
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /^Bloqueada/ }))?.text).toBe('Bloqueada (1)')
+  expect((await ui.find({ type: 'Text', text: /minimumReleaseAge/ }))?.text).toBe('  Publicada hace 1 h: pnpm espera 24 h para instalarla (minimumReleaseAge)')
+
+  await ui.press({ key: 'upgrade-bumps' })
+  expect(ran.filter(argv => argv[0] === 'pnpm')).toEqual([['pnpm', 'add', '-D', 'typescript@~5.9.3']])
   await ui.unmount()
 })
