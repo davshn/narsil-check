@@ -980,3 +980,31 @@ test('a minimumReleaseAge shorter than a day never lowers the wait: every ecosys
   expect((await ui.find({ type: 'Text', text: /Narsil Check espera/ }))?.text).toBe('  Publicada hace 3 h: Narsil Check espera 24 h antes de subirla')
   await ui.unmount()
 })
+
+test('a version the Expo SDK pins waits a day too: the newest one its range takes must be old enough', async ($, on) => {
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const expoProject = (camera: string) => ({
+    'package.json': JSON.stringify({ dependencies: { expo: '~54.0.0', 'expo-camera': '~16.1.0', 'expo-haptics': '~14.0.0' } }),
+    'package-lock.json': JSON.stringify({ packages: {} }),
+    'node_modules/expo/package.json': JSON.stringify({ version: '54.0.1' }),
+    'node_modules/expo-camera/package.json': JSON.stringify({ version: '16.1.0' }),
+    'node_modules/expo-haptics/package.json': JSON.stringify({ version: '14.0.0' }),
+    'node_modules/expo/bundledNativeModules.json': JSON.stringify({ 'expo-camera': camera, 'expo-haptics': '~15.0.7' }),
+  })
+  project(on, expoProject('~17.0.7'), { expo: '54.0.1', 'expo-camera': '18.0.0', 'expo-haptics': '16.0.0' }, [], {
+    // 17.0.8 is the newest the range takes, an hour old; 18.0.0 is past the range.
+    'https://registry.npmjs.org/expo-camera': JSON.stringify({ time: { '17.0.7': OLD, '17.0.8': hourAgo, '18.0.0': OLD, '17.1.0-beta.1': OLD } }),
+    'https://registry.npmjs.org/expo-haptics': JSON.stringify({ time: { '15.0.7': OLD, '15.0.8': OLD } }),
+  })
+  host(on)
+  on('ui.toast', () => ({ value: undefined }))
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Button', text: /Bloqueada/ }))?.text).toBe('▾ Bloqueada (1)')
+  expect((await ui.find({ type: 'Text', text: /El SDK de Expo pide/ }))?.text).toBe('  El SDK de Expo pide 17.0.8 (npx expo install --fix). Publicada hace 1 h: Narsil Check espera 24 h antes de subirla')
+  // expo-haptics' range takes 15.0.8, old enough: it stays outside the SDK.
+  expect((await ui.find({ type: 'Button', text: /Fuera del SDK de Expo/ }))?.text).toBe('▾ Fuera del SDK de Expo (1)')
+  await ui.unmount()
+})

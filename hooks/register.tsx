@@ -26,7 +26,8 @@ import type { Adapter, Dep, Files } from './ecosystems'
 import { branchName, commitBody, commitTitle, isMainBranch, prBody, prUrlOf } from './git'
 import { EXPO_TABLE, LOCK, MANIFEST, NPMRC, WORKSPACE, ageConflict, ageRefusal, expoTableUrl, installedFromManifest, installedOf, latestUrl, packumentUrl, parseManifest, peerConflicts, pinConflicts, RELEASE_AGE, releaseAgeEnv, releaseAgeOf, upgradeOf, versionUrl } from './npm'
 import type { Declared, Found, Installed } from './npm'
-import { baseOf, bumpOf, parseVersion, show } from './semver'
+import { baseOf, bumpOf, compare, parseVersion, satisfies, show } from './semver'
+import type { Version } from './semver'
 import {
   CONNECTORS_SERVER,
   CONNECTORS_TOOL,
@@ -377,6 +378,20 @@ async function releasedAt($: EngineInterface, ecosystem: Ecosystem, name: string
   return published
 }
 
+// Why a version the Expo SDK pins must wait: its range (`~5.0.2`) goes in as
+// the newest stable version that meets it, which must be a day old. A range
+// no published version meets, or a date that cannot be read, waits too.
+async function expoAgeConflict($: EngineInterface, u: Upgrade, viewer: string, now: number): Promise<string | undefined> {
+  const times = await npmTimes($, u.name, viewer)
+  const target = Object.keys(times ?? {})
+    .map(text => ({ text, version: parseVersion(text) }))
+    .filter((v): v is { text: string; version: Version } => v.version !== undefined && v.version.pre === '' && satisfies(v.version, u.latest))
+    .sort((a, b) => compare(b.version, a.version))[0]
+  const published = target ? times?.[target.text] : undefined
+  const why = ageConflict(typeof published === 'string' ? published : undefined, now, RELEASE_AGE, 'narsil')
+  return why && `El SDK de Expo pide ${target?.text ?? u.latest} (npx expo install --fix). ${why}`
+}
+
 // The upgrades too young to go up, each with why: every ecosystem waits 24
 // hours after a version is published, and a pnpm project its
 // minimumReleaseAge when that is longer. A version whose publication date
@@ -387,7 +402,11 @@ async function youngConflicts($: EngineInterface, upgrades: Upgrade[]): Promise<
   const viewer = (await $.fs.exists('pnpm-lock.yaml')) ? 'pnpm' : 'npm'
   const now = Date.now()
   await pool(upgrades, CONCURRENCY, async u => {
-    if (u.group === 'expo') return
+    if (u.group === 'expo') {
+      const why = await expoAgeConflict($, u, viewer, now)
+      if (why) young.set(u, [why])
+      return
+    }
     const isPnpm = u.ecosystem === 'npm' && pnpm >= RELEASE_AGE
     const minutes = isPnpm ? pnpm : RELEASE_AGE
     const published = await releasedAt($, u.ecosystem, u.name, u.latest, viewer)
@@ -655,6 +674,14 @@ async function scanNpm($: EngineInterface, isFresh: boolean): Promise<Scanned> {
           changed = true
         }
       }
+    }
+    // A version the Expo SDK pins goes in through npx expo install --fix,
+    // outside the mod's install: it waits the same day, blocked meanwhile.
+    for (const u of upgrades) {
+      const why = u.group === 'expo' ? young.get(u) : undefined
+      if (!why) continue
+      u.conflicts = why
+      u.group = 'blocked'
     }
     return { upgrades, held, checked: checked.length, failed }
   }
