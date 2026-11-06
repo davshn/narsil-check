@@ -4,6 +4,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { holdNote } from '../hooks/adapter'
 import { isKotlin, kotlinConflicts, parseMaven } from '../hooks/maven'
+import { released } from './released'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
 
@@ -98,6 +99,8 @@ function gradleProject(on: On, catalog: string, metadata: Record<string, string[
     return { value: undefined }
   })
   on('http.fetch', (_, e) => {
+    const date = released(e.url)
+    if (date) return date
     const versions = Object.entries(metadata).find(([path]) => e.url.includes(path))?.[1]
     return {
       value: versions

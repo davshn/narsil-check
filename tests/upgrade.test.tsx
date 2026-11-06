@@ -4,6 +4,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { baseOf, bumpOf, parseVersion, satisfies } from '../hooks/semver'
 import type { Version } from '../hooks/semver'
+import { OLD } from './released'
 import { ageConflict, installArgv, installedFromManifest, isExactPin, releaseAgeOf, latestUrl, managerOf, parseManifest, peerConflicts, pinConflicts, rangeFor, upgradeOf } from '../hooks/npm'
 import type { Installed } from '../hooks/npm'
 import { branchName, commitTitle, isMainBranch, prUrlOf } from '../hooks/git'
@@ -57,7 +58,7 @@ function project(on: On, files: Record<string, string>, latest: Record<string, s
     const version = latest[name]
     return {
       value: version
-        ? { status: 200, ok: true, headers: {}, text: JSON.stringify({ version }) }
+        ? { status: 200, ok: true, headers: {}, text: JSON.stringify({ version, time: { [version]: OLD } }) }
         : { status: 404, ok: false, headers: {}, text: '{}' },
     }
   })
@@ -861,8 +862,9 @@ test("a packument the host cannot fetch (astro's and tailwindcss's run to ~10 MB
   const { 'package-lock.json': _, ...rest } = FILES
   const files = { ...rest, 'pnpm-lock.yaml': 'lockfileVersion: 9.0\n' }
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-  // zod's packument is not served: the fetch answers 404.
   project(on, files, LATEST, [], {
+    // zod's packument comes with no publication times.
+    'https://registry.npmjs.org/zod': JSON.stringify({ version: '3.25.1' }),
     'https://registry.npmjs.org/typescript': JSON.stringify({ time: { '5.9.3': '2020-01-01T00:00:00Z' } }),
     'https://registry.npmjs.org/react': JSON.stringify({ time: { '19.2.0': '2020-01-01T00:00:00Z' } }),
   })
@@ -901,6 +903,8 @@ test('a publication date nobody can read blocks the upgrade', async ($, on) => {
   const { 'package-lock.json': _, ...rest } = FILES
   const files = { ...rest, 'pnpm-lock.yaml': 'lockfileVersion: 9.0\n' }
   project(on, files, LATEST, [], {
+    // zod's packument comes with no publication times.
+    'https://registry.npmjs.org/zod': JSON.stringify({ version: '3.25.1' }),
     'https://registry.npmjs.org/typescript': JSON.stringify({ time: { '5.9.3': '2020-01-01T00:00:00Z' } }),
     'https://registry.npmjs.org/react': JSON.stringify({ time: { '19.2.0': '2020-01-01T00:00:00Z' } }),
   })
@@ -938,10 +942,10 @@ test('an install pnpm refuses for minimumReleaseAge says so: a dependency it pul
   await ui.unmount()
 })
 
-test('outside git, the policy is read from the files as they are', async ($, on) => {
+test('outside git, the policy is read from the files as they are: a longer minimumReleaseAge than a day is the wait', async ($, on) => {
   const { 'package-lock.json': _, ...rest } = FILES
-  const files = { ...rest, 'pnpm-lock.yaml': 'lockfileVersion: 9.0\n', 'pnpm-workspace.yaml': 'minimumReleaseAge: 0\n' }
-  const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const files = { ...rest, 'pnpm-lock.yaml': 'lockfileVersion: 9.0\n', 'pnpm-workspace.yaml': 'minimumReleaseAge: 2880\n' }
+  const hourAgo = new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString()
   project(on, files, LATEST, [], {
     'https://registry.npmjs.org/zod': JSON.stringify({ time: { '3.25.1': hourAgo } }),
     'https://registry.npmjs.org/typescript': JSON.stringify({ time: { '5.9.3': '2020-01-01T00:00:00Z' } }),
@@ -953,6 +957,26 @@ test('outside git, the policy is read from the files as they are', async ($, on)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Button', text: /Bloqueada/ })).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /minimumReleaseAge/ }))?.text).toBe('  Publicada hace 30 h: pnpm espera 48 h para instalarla (minimumReleaseAge)')
+  await ui.unmount()
+})
+
+test('a minimumReleaseAge shorter than a day never lowers the wait: every ecosystem waits 24 hours', async ($, on) => {
+  const { 'package-lock.json': _, ...rest } = FILES
+  const files = { ...rest, 'pnpm-lock.yaml': 'lockfileVersion: 9.0\n', 'pnpm-workspace.yaml': 'minimumReleaseAge: 60\n' }
+  const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
+  project(on, files, LATEST, [], {
+    'https://registry.npmjs.org/zod': JSON.stringify({ time: { '3.25.1': threeHoursAgo } }),
+    'https://registry.npmjs.org/typescript': JSON.stringify({ time: { '5.9.3': '2020-01-01T00:00:00Z' } }),
+    'https://registry.npmjs.org/react': JSON.stringify({ time: { '19.2.0': '2020-01-01T00:00:00Z' } }),
+  })
+  host(on, 'git --no-pager show HEAD:')
+  on('ui.toast', () => ({ value: undefined }))
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Button', text: /Bloqueada/ }))?.text).toBe('▾ Bloqueada (1)')
+  expect((await ui.find({ type: 'Text', text: /Narsil Check espera/ }))?.text).toBe('  Publicada hace 3 h: Narsil Check espera 24 h antes de subirla')
   await ui.unmount()
 })

@@ -159,6 +159,13 @@ export const PYPI: Adapter = {
   lockfiles: [...LOCKS, DEV_REQUIREMENTS],
   parse: parsePypi,
   latestUrl: name => `https://pypi.org/pypi/${encodeURIComponent(name)}/json`,
+  // The earliest file of the release: when it became installable.
+  releasedUrls: (name, version) => [`https://pypi.org/pypi/${encodeURIComponent(name)}/${encodeURIComponent(version)}/json`],
+  releasedOf: text => {
+    const files = (JSON.parse(text) as { urls?: { upload_time_iso_8601?: unknown }[] }).urls ?? []
+    const times = files.map(f => f.upload_time_iso_8601).filter((t): t is string => typeof t === 'string').sort()
+    return times[0]
+  },
   headers: { accept: 'application/json' },
   latestOf: text => {
     const version = (JSON.parse(text) as { info?: { version?: unknown } }).info?.version

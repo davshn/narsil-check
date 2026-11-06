@@ -123,6 +123,11 @@ export const PUB: Adapter = {
   lockfiles: [LOCK],
   parse: parsePub,
   latestUrl: name => `https://pub.dev/api/packages/${encodeURIComponent(name)}`,
+  releasedUrls: (name, version) => [`https://pub.dev/api/packages/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}`],
+  releasedOf: text => {
+    const at = (JSON.parse(text) as { published?: unknown }).published
+    return typeof at === 'string' ? at : undefined
+  },
   headers: { accept: 'application/json' },
   latestOf: text => {
     const version = (JSON.parse(text) as { latest?: { version?: unknown } }).latest?.version

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Audit, Explained, Finding, Group, Job, Pending, Pr, Pull, Scan, Severity, Upgrade } from '../types'
+import type { Audit, Ecosystem, Explained, Finding, Group, Job, Pending, Pr, Pull, Scan, Severity, Upgrade } from '../types'
 import { BATCH_SIZE, OSV_BATCH, OSV_VULN, SEVERITIES, SEVERITY_TITLE, batchBody, batchIds, bySeverity, fixedBy, mergeVulns, vulnCopyText, vulnOf, worstOf } from './osv'
 import type { Package } from './osv'
 import {
@@ -24,7 +24,7 @@ import type { Reason } from './explain'
 import { ADAPTERS, NPM, adapterOf, holdNote, manifestOf, manifestsOf, specChanges } from './ecosystems'
 import type { Adapter, Dep, Files } from './ecosystems'
 import { branchName, commitBody, commitTitle, isMainBranch, prBody, prUrlOf } from './git'
-import { EXPO_TABLE, LOCK, MANIFEST, NPMRC, WORKSPACE, ageConflict, ageRefusal, expoTableUrl, installedFromManifest, installedOf, latestUrl, packumentUrl, parseManifest, peerConflicts, pinConflicts, publishedAt, releaseAgeEnv, releaseAgeOf, upgradeOf, versionUrl } from './npm'
+import { EXPO_TABLE, LOCK, MANIFEST, NPMRC, WORKSPACE, ageConflict, ageRefusal, expoTableUrl, installedFromManifest, installedOf, latestUrl, packumentUrl, parseManifest, peerConflicts, pinConflicts, RELEASE_AGE, releaseAgeEnv, releaseAgeOf, upgradeOf, versionUrl } from './npm'
 import type { Declared, Found, Installed } from './npm'
 import { baseOf, bumpOf, parseVersion, show } from './semver'
 import {
@@ -327,45 +327,71 @@ async function releaseMinutes($: EngineInterface): Promise<number> {
   return releaseAgeOf({ workspace: await text(WORKSPACE), npmrc: await text(NPMRC), manifest: await readJson($, MANIFEST) }).minutes
 }
 
-// A version's publication time as `pnpm view` reads it, or undefined when
-// pnpm cannot say.
-async function viewedAt($: EngineInterface, name: string, version: string): Promise<string | undefined> {
+// When each version of an npm package was published: the packument's times,
+// else what `pnpm view` or `npm view` reads, for the host does not hand back
+// a large packument (astro's and tailwindcss's run to ~10 MB). `version`, when
+// given, must be among them for the packument's to do.
+async function npmTimes($: EngineInterface, name: string, viewer: string, version?: string): Promise<Record<string, unknown> | undefined> {
+  const page = await fetchText($, packumentUrl(name), { accept: 'application/json' }).catch(() => undefined)
   try {
-    const ran = await runCommand($, ['pnpm', 'view', name, 'time', '--json'], VIEW_MS)
+    const time = page ? (JSON.parse(page) as { time?: unknown }).time : undefined
+    if (time && typeof time === 'object' && (version === undefined || version in time)) return time as Record<string, unknown>
+  } catch {
+    // An answer that is not JSON: ask the package manager.
+  }
+  try {
+    const ran = await runCommand($, [viewer, 'view', name, 'time', '--json'], VIEW_MS)
     if (ran.exitCode !== 0 || ran.isStdoutTruncated) return undefined
-    const time = (JSON.parse(ran.stdout) as Record<string, unknown>)[version]
-    return typeof time === 'string' ? time : undefined
+    const time = JSON.parse(ran.stdout) as unknown
+    return time && typeof time === 'object' ? (time as Record<string, unknown>) : undefined
   } catch {
     return undefined
   }
 }
 
-// The upgrades pnpm would refuse for being younger than its
-// minimumReleaseAge, each with why: one whose publication date cannot be read
-// is refused too. Only in a pnpm project. A date never changes once
-// published, so it is kept for good.
-async function youngConflicts($: EngineInterface, upgrades: Upgrade[]): Promise<Map<Upgrade, string[]>> {
-  const young = new Map<Upgrade, string[]>()
-  const minutes = await releaseMinutes($)
-  if (minutes <= 0) return young
-  const now = Date.now()
-  await pool(upgrades, CONCURRENCY, async u => {
-    if (u.group === 'expo') return
-    const key = `published:${u.name}@${u.latest}`
-    let published = (await $.store.get(key)) as string | undefined
-    if (published === undefined) {
-      const page = await fetchText($, packumentUrl(u.name), { accept: 'application/json' }).catch(() => undefined)
+// When `version` of an upgrade's package was published, or undefined when
+// its registry cannot say. A date never changes once published, so it is
+// kept for good.
+async function releasedAt($: EngineInterface, ecosystem: Ecosystem, name: string, version: string, viewer: string): Promise<string | undefined> {
+  const key = ecosystem === 'npm' ? `published:${name}@${version}` : `published:${ecosystem}:${name}@${version}`
+  const cached = (await $.store.get(key)) as string | undefined
+  if (cached !== undefined) return cached
+  let published: string | undefined
+  if (ecosystem === 'npm') {
+    const time = (await npmTimes($, name, viewer, version))?.[version]
+    published = typeof time === 'string' ? time : undefined
+  } else {
+    const adapter = adapterOf(ecosystem)
+    for (const url of adapter.releasedUrls?.(name, version) ?? []) {
+      const res = await $.http.fetch(url, { headers: adapter.headers ?? {} }).catch(() => undefined)
+      if (!res?.ok) continue
       try {
-        published = page ? publishedAt(page, u.latest) : undefined
+        published = adapter.releasedOf?.(res.text, res.headers)
       } catch {
         published = undefined
       }
-      // The host does not hand back a large packument (astro's and
-      // tailwindcss's run to ~10 MB), so pnpm reads the dates itself.
-      if (!published) published = await viewedAt($, u.name, u.latest)
-      if (published) await $.store.set(key, published)
+      if (published) break
     }
-    const why = ageConflict(published, now, minutes)
+  }
+  if (published) await $.store.set(key, published)
+  return published
+}
+
+// The upgrades too young to go up, each with why: every ecosystem waits 24
+// hours after a version is published, and a pnpm project its
+// minimumReleaseAge when that is longer. A version whose publication date
+// cannot be read waits too.
+async function youngConflicts($: EngineInterface, upgrades: Upgrade[]): Promise<Map<Upgrade, string[]>> {
+  const young = new Map<Upgrade, string[]>()
+  const pnpm = await releaseMinutes($)
+  const viewer = (await $.fs.exists('pnpm-lock.yaml')) ? 'pnpm' : 'npm'
+  const now = Date.now()
+  await pool(upgrades, CONCURRENCY, async u => {
+    if (u.group === 'expo') return
+    const isPnpm = u.ecosystem === 'npm' && pnpm >= RELEASE_AGE
+    const minutes = isPnpm ? pnpm : RELEASE_AGE
+    const published = await releasedAt($, u.ecosystem, u.name, u.latest, viewer)
+    const why = ageConflict(published, now, minutes, isPnpm ? 'pnpm' : 'narsil')
     if (why) young.set(u, [why])
   })
   return young
@@ -529,12 +555,14 @@ async function scanGeneric($: EngineInterface, adapter: Adapter, present: string
     }
   })
   const upgrades = found.filter((f): f is Upgrade => typeof f === 'object')
-  // An upgrade the project keeps on purpose, or one the ecosystem knows
-  // breaks something else, cannot go up alone, whatever its jump.
+  // A version published less than a day ago waits, as in every ecosystem.
+  const young = await youngConflicts($, upgrades)
+  // An upgrade the project keeps on purpose, one the ecosystem knows breaks
+  // something else, or one too young cannot go up alone, whatever its jump.
   for (const u of upgrades) {
     const ref = u.source?.startsWith('catalog:versions.') ? u.source.slice('catalog:versions.'.length) : undefined
     const hold = holdNote(files, [u.name, u.display ?? '', ref ?? ''], u.spec)
-    u.conflicts = [...(hold ? [`Fijada a propósito: «${hold}»`] : []), ...(adapter.conflictsOf?.(u, deps, files) ?? [])]
+    u.conflicts = [...(hold ? [`Fijada a propósito: «${hold}»`] : []), ...(adapter.conflictsOf?.(u, deps, files) ?? []), ...(young.get(u) ?? [])]
     if (u.conflicts.length > 0) u.group = 'blocked'
   }
   return { upgrades, held: 0, checked: found.filter(f => f !== undefined).length, failed }

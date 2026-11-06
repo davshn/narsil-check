@@ -3,6 +3,7 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { SWIFTPM, anyCase, canonicalUrl, latestTag, minimumOf, moduleOf, parsePackageSwift, parsePbxproj, parseSwiftpm, resolvedVersions, rewriteSwift } from '../hooks/swiftpm'
+import { released } from './released'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
 
@@ -181,6 +182,7 @@ function swiftPackage(on: On, tags: Record<string, string[]>) {
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.toast', () => ({ value: undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('http.fetch', (_, e) => released(e.url) ?? { value: { status: 404, ok: false, headers: {}, text: '' } })
   const ran: string[][] = []
   on('process.run', (_, e) => {
     ran.push([...e.argv])

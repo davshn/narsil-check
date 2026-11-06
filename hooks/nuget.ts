@@ -79,6 +79,11 @@ export const NUGET: Adapter = {
   lockfiles: [],
   parse: parseNuget,
   latestUrl: name => `https://api.nuget.org/v3-flatcontainer/${name.toLowerCase()}/index.json`,
+  releasedUrls: (name, version) => [`https://api.nuget.org/v3/registration5-semver1/${name.toLowerCase()}/${version.toLowerCase()}.json`],
+  releasedOf: text => {
+    const at = (JSON.parse(text) as { published?: unknown }).published
+    return typeof at === 'string' ? at : undefined
+  },
   latestOf: latestNuget,
   rewrite: (files, upgrades) => {
     const out: Files = {}

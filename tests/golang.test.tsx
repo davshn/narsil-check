@@ -3,6 +3,7 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { GO, nextMajorPath, parseGoMod, proxyPath } from '../hooks/golang'
+import { released } from './released'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
 
@@ -70,6 +71,8 @@ function goProject(on: On, proxy: Record<string, string>) {
   })
   const asked: string[] = []
   on('http.fetch', (_, e) => {
+    const date = released(e.url)
+    if (date) return date
     const path = e.url.replace('https://proxy.golang.org/', '').replace(/\/@latest$/, '')
     asked.push(path)
     const version = proxy[path]

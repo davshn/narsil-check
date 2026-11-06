@@ -3,6 +3,7 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { RUBYGEMS, gemSpecFor, lockVersion, parseGemLine, parseGemfile, rewriteGemfile } from '../hooks/rubygems'
+import { released } from './released'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
 
@@ -119,6 +120,8 @@ function rubyApp(on: On, latest: Record<string, string>) {
     return { value: undefined }
   })
   on('http.fetch', (_, e) => {
+    const date = released(e.url)
+    if (date) return date
     const version = latest[decodeURIComponent(/versions\/([^/]+)\/latest\.json$/.exec(e.url)?.[1] ?? '')]
     return {
       value: version

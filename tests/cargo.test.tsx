@@ -4,6 +4,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { CARGO, cargoRange, cargoSpecFor, parseCargo, rewriteCargo } from '../hooks/cargo'
 import { parseToml } from '../hooks/toml'
+import { released } from './released'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
 
@@ -141,7 +142,7 @@ test("crates.io's answer gives the latest stable release and the repository", ()
 })
 
 // A Rust project on disk and crates.io, standing for the engine.
-function rust(on: On, latest: Record<string, string>) {
+function rust(on: On, latest: Record<string, string>, young: Record<string, string> = {}) {
   const files: Record<string, string> = { 'Cargo.toml': CARGO_TOML, 'Cargo.lock': CARGO_LOCK }
   const store = new Map<string, unknown>()
   const keyOf = (path: string) => {
@@ -159,6 +160,8 @@ function rust(on: On, latest: Record<string, string>) {
     return { value: undefined }
   })
   on('http.fetch', (_, e) => {
+    const date = released(e.url, young)
+    if (date) return date
     const version = latest[e.url.replace('https://crates.io/api/v1/crates/', '')]
     return {
       value: version
@@ -212,5 +215,22 @@ test('a Rust project lists its crates and the button raises Cargo.toml and updat
   expect(files['Cargo.toml']).toContain('tokio = "1.48.0"   # async runtime')
   expect(files['Cargo.toml']).toContain('insta = "=1.40.1"')
   expect(files['Cargo.toml']).toContain('"rand" = "0.8.5"')
+  await ui.unmount()
+})
+
+test('a crate published less than a day ago waits, and one whose date crates.io does not give waits too', async ($, on) => {
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const { ran } = rust(on, { serde: '1.0.229', tokio: '1.48.0', rand: '0.9.2', reqwest: '0.11.20', insta: '1.40.1', winapi: '0.3.9' }, { 'serde/1.0.229': hourAgo, 'insta/1.40.1': 'not a date' })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('4 para actualizar de 6 · 2 bloqueadas · 1 mayores · 1 triviales')
+  const reasons = (await ui.findAll({ type: 'Text', text: /Narsil Check espera/ })).map(t => t.text)
+  expect(reasons).toEqual(['  Publicada hace 1 h: Narsil Check espera 24 h antes de subirla', '  No pude leer cuándo se publicó: Narsil Check espera 24 h antes de subirla'])
+
+  // The button takes only tokio, the one old enough.
+  await ui.press({ key: 'upgrade-bumps' })
+  expect(ran.filter(argv => argv[0] === 'cargo')).toEqual([['cargo', 'update', '-p', 'tokio']])
   await ui.unmount()
 })

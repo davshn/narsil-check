@@ -60,6 +60,16 @@ export function nextMajorPath(path: string, current: string): string {
   return `${path}/v${Math.max(major, 1) + 1}`
 }
 
+// The module path a version lives at: from v2 on, the major is part of the
+// path (example.com/m/v5, gopkg.in/yaml.v3), whatever path declared it.
+export function majorPath(path: string, version: string): string {
+  const major = Number(/^v?(\d+)/.exec(version)?.[1] ?? 0)
+  const gopkg = /^(gopkg\.in\/.+\.v)\d+$/.exec(path)
+  if (gopkg) return `${gopkg[1]}${major}`
+  const base = path.replace(/\/v\d+$/, '')
+  return major >= 2 ? `${base}/v${major}` : base
+}
+
 export const GO: Adapter = {
   id: 'go',
   label: 'Go',
@@ -67,6 +77,14 @@ export const GO: Adapter = {
   lockfiles: [SUM],
   parse: parseGoMod,
   latestUrl: name => `https://proxy.golang.org/${proxyPath(name)}/@latest`,
+  releasedUrls: (name, version) => {
+    const tag = version.startsWith('v') ? version : `v${version}`
+    return [`https://proxy.golang.org/${proxyPath(majorPath(name, tag))}/@v/${proxyPath(tag)}.info`]
+  },
+  releasedOf: text => {
+    const at = (JSON.parse(text) as { Time?: unknown }).Time
+    return typeof at === 'string' ? at : undefined
+  },
   latestOf: text => {
     const version = (JSON.parse(text) as { Version?: unknown }).Version
     // A pseudo-version (v0.0.0-20240101-abcdef) is a commit, not a release.

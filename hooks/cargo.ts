@@ -125,6 +125,11 @@ export const CARGO: Adapter = {
   lockfiles: [LOCK],
   parse: parseCargo,
   latestUrl: name => `https://crates.io/api/v1/crates/${encodeURIComponent(name)}`,
+  releasedUrls: (name, version) => [`https://crates.io/api/v1/crates/${encodeURIComponent(name)}/${encodeURIComponent(version)}`],
+  releasedOf: text => {
+    const at = (JSON.parse(text) as { version?: { created_at?: unknown } }).version?.created_at
+    return typeof at === 'string' ? at : undefined
+  },
   // crates.io refuses a request with no User-Agent.
   headers: { accept: 'application/json', 'user-agent': 'narsil-check (https://github.com/davshn/narsil-check)' },
   latestOf: text => {

@@ -308,6 +308,19 @@ export const MAVEN: Adapter = {
   // A package is named after its group most of the time: import io.ktor.client.
   importPattern: name => `^[[:space:]]*import[[:space:]]+(static[[:space:]]+)?${escapeRegex(split(name)[0])}\\.`,
   infoUrl: pomUrl,
+  // A version's POM, where its repository serves it, and on the Plugin
+  // Portal for a Gradle plugin published as a library: the date it was
+  // uploaded is the answer's Last-Modified.
+  releasedUrls: (name, version) => {
+    const own = pomUrl(name, version)
+    const [group, artifact] = split(name)
+    const portal = `https://plugins.gradle.org/m2/${group.replace(/\./g, '/')}/${artifact}/${version}/${artifact}-${version}.pom`
+    return own === portal ? [own] : [own, portal]
+  },
+  releasedOf: (_, headers) => {
+    const at = Date.parse(headers['last-modified'] ?? '')
+    return Number.isNaN(at) ? undefined : new Date(at).toISOString()
+  },
   conflictsOf: kotlinConflicts,
   repoUrlOf: pom => {
     const scm = /<scm>[\s\S]*?<url>\s*([^<\s]+)\s*<\/url>/.exec(pom)?.[1]

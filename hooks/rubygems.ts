@@ -107,6 +107,11 @@ export const RUBYGEMS: Adapter = {
   lockfiles: [LOCK],
   parse: parseGemfile,
   latestUrl: name => `https://rubygems.org/api/v1/versions/${encodeURIComponent(name)}/latest.json`,
+  releasedUrls: (name, version) => [`https://rubygems.org/api/v2/rubygems/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}.json`],
+  releasedOf: text => {
+    const at = (JSON.parse(text) as { created_at?: unknown }).created_at
+    return typeof at === 'string' ? at : undefined
+  },
   headers: { accept: 'application/json' },
   latestOf: text => {
     const version = (JSON.parse(text) as { version?: unknown }).version

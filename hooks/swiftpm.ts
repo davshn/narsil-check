@@ -166,6 +166,19 @@ export const SWIFTPM: Adapter = {
   parse: parseSwiftpm,
   latestUrl: name => name,
   latestCommand: name => ['git', 'ls-remote', '--tags', '--refs', name],
+  // A package is a git repository: on GitHub, the date of the commit its
+  // tag points to (the tag spelled bare or with a v). Elsewhere no date
+  // is known, so the wait blocks it.
+  releasedUrls: (name, version) => {
+    const repo = /github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?\/?$/.exec(name)
+    if (!repo) return []
+    const base = `https://api.github.com/repos/${repo[1]}/${repo[2]}/commits`
+    return [`${base}/${encodeURIComponent(version)}`, `${base}/v${encodeURIComponent(version)}`]
+  },
+  releasedOf: text => {
+    const at = (JSON.parse(text) as { commit?: { committer?: { date?: unknown } } }).commit?.committer?.date
+    return typeof at === 'string' ? at : undefined
+  },
   latestOf: latestTag,
   rewrite: (files, upgrades) => {
     const out: Files = {}

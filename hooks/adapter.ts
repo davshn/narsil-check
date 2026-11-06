@@ -57,6 +57,11 @@ export type Adapter = {
   // (a version's POM, nuspec or gem record).
   repoUrlOf: (latestText: string) => string | undefined
   infoUrl?: (name: string, latest: string) => string
+  // Where the registry says when `version` was published, for the 24-hour
+  // wait: addresses tried in order, and the date an answer gives (from its
+  // text, or from its lower-cased headers, as a POM's Last-Modified).
+  releasedUrls?: (name: string, version: string) => string[]
+  releasedOf?: (text: string, headers: Record<string, string>) => string | undefined
   // What else in the project an upgrade breaks, in words, when the
   // ecosystem knows (Kotlin and the compiler plugins built for one Kotlin).
   conflictsOf?: (upgrade: Upgrade, deps: Dep[], files: Files) => string[]

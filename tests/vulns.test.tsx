@@ -7,6 +7,7 @@ import { batchBody, batchIds, cvss3Score, fixedBy, fixedFor, mergeVulns, osvName
 import type { Package } from '../hooks/osv'
 import { auditSummary, vulnsColor, vulnsLabel } from '../hooks/words'
 import type { Finding } from '../types'
+import { released } from './released'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
 
@@ -153,6 +154,8 @@ function project(on: On) {
     return { value: files[key] as string }
   })
   on('http.fetch', (_, e) => {
+    const date = released(e.url)
+    if (date) return date
     const ok = (text: string) => ({ value: { status: 200, ok: true, headers: {}, text } })
     if (e.url === 'https://api.osv.dev/v1/querybatch') {
       const queries = (JSON.parse(e.init?.body ?? '{}') as { queries: { package: { name: string } }[] }).queries

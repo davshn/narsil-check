@@ -251,25 +251,27 @@ export function packumentUrl(name: string): string {
   return `https://registry.npmjs.org/${name.replace('/', '%2F')}`
 }
 
-export function publishedAt(text: string, version: string): string | undefined {
-  const time = (JSON.parse(text) as { time?: Record<string, unknown> }).time?.[version]
-  return typeof time === 'string' ? time : undefined
-}
 
 // A wait in minutes, as the pane says it.
 const span = (m: number) => (m >= 120 && m % 60 === 0 ? `${m / 60} h` : m >= 120 ? `${Math.floor(m / 60)} h` : `${m} min`)
 
-// Why pnpm would refuse a version published at `published`, or undefined
-// when it is old enough. A date that cannot be read blocks too: nothing goes
-// up without proof that it waited.
-export function ageConflict(published: string | undefined, now: number, minutes: number): string | undefined {
+// Every ecosystem waits this long after a version is published before an
+// upgrade takes it: a day, as pnpm 11's minimumReleaseAge by default.
+export const RELEASE_AGE = 1440
+
+// Why a version published at `published` must wait, or undefined when it is
+// old enough. A date that cannot be read blocks too: nothing goes up without
+// proof that it waited. `who` says whose wait it is: pnpm's minimumReleaseAge,
+// or the mod's own for every ecosystem.
+export function ageConflict(published: string | undefined, now: number, minutes: number, who: 'pnpm' | 'narsil' = 'pnpm'): string | undefined {
   if (minutes <= 0) return undefined
+  const rule = who === 'pnpm' ? `pnpm espera ${span(minutes)} para instalarla (minimumReleaseAge)` : `Narsil Check espera ${span(minutes)} antes de subirla`
   const at = published ? Date.parse(published) : NaN
-  if (Number.isNaN(at)) return `No pude leer cuándo se publicó: pnpm espera ${span(minutes)} para instalarla (minimumReleaseAge)`
+  if (Number.isNaN(at)) return `No pude leer cuándo se publicó: ${rule}`
   const age = Math.max(0, Math.floor((now - at) / 60_000))
   if (age >= minutes) return undefined
   const ago = age >= 60 ? `${Math.floor(age / 60)} h` : `${age} min`
-  return `Publicada hace ${ago}: pnpm espera ${span(minutes)} para instalarla (minimumReleaseAge)`
+  return `Publicada hace ${ago}: ${rule}`
 }
 
 // The environment pnpm installs under: the policy, strict and with no

@@ -3,6 +3,7 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { PUB, isFlutter, parsePub, pubSpecFor, rewritePub } from '../hooks/pub'
+import { released } from './released'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
 
@@ -123,6 +124,8 @@ function flutterApp(on: On, latest: Record<string, string>) {
     return { value: undefined }
   })
   on('http.fetch', (_, e) => {
+    const date = released(e.url)
+    if (date) return date
     const version = latest[e.url.replace('https://pub.dev/api/packages/', '')]
     return {
       value: version

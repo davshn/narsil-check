@@ -4,6 +4,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { GROUPS, HEALTH_SIZE, NARSIL_SIZE, PALETTE, commandHelp, healthOf, healthSvg, sectionColor, sectionLabel } from '../hooks/words'
 import { PARADA_CLARO, PARADA_OSCURO } from '../hooks/narsil-art'
+import { OLD } from './released'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
 
@@ -64,7 +65,7 @@ function project(on: On) {
     if (key === undefined) throw new Error(`ENOENT: ${e.path}`)
     return { value: files[key] as string }
   })
-  on('http.fetch', () => ({ value: { status: 200, ok: true, headers: {}, text: JSON.stringify({ version: '3.25.1' }) } }))
+  on('http.fetch', () => ({ value: { status: 200, ok: true, headers: {}, text: JSON.stringify({ version: '3.25.1', time: { '3.25.1': OLD } }) } }))
   on('store.get', (_, e) => ({ value: store.get(e.key) }))
   on('store.set', (_, e) => {
     store.set(e.key, e.value)

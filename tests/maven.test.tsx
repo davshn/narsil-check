@@ -3,6 +3,7 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { MAVEN, isStable, latestStable, metadataUrl, parseCatalog, parseGradle, parseMaven, parsePom, pluginCoordinate, pomUrl, repositoryOf, rewriteMaven } from '../hooks/maven'
+import { released } from './released'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
 
@@ -210,6 +211,8 @@ function gradleProject(on: On, metadata: Record<string, string[]>) {
     return { value: undefined }
   })
   on('http.fetch', (_, e) => {
+    const date = released(e.url)
+    if (date) return date
     const versions = metadata[e.url]
     return {
       value: versions

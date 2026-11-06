@@ -3,6 +3,7 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { PYPI, importNameOf, normalize, parsePypi, parseRequirement, pinOf, pySpecFor, rewritePypi } from '../hooks/pypi'
+import { released } from './released'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
 
@@ -162,6 +163,8 @@ function python(on: On, latest: Record<string, string>, web: Record<string, stri
     return { value: undefined }
   })
   on('http.fetch', (_, e) => {
+    const date = released(e.url)
+    if (date) return date
     const page = web[e.url]
     if (page !== undefined) return { value: { status: 200, ok: true, headers: {}, text: page } }
     const name = decodeURIComponent(e.url.replace('https://pypi.org/pypi/', '').replace(/\/json$/, ''))
