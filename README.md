@@ -30,7 +30,7 @@ Cada sesión empieza igual: **Entorno** desplegado, **Conectores** plegado, y **
 
 Dentro de **Actualizaciones** y **Vulnerabilidades**, cada grupo (**Bloqueada**, **Versión mayor**, **Crítica**, **Alta**...) también se pliega con su propia cabecera (`▾ Bloqueada (2)` / `▸ Bloqueada (2)`), y el panel recuerda cuáles cerraste. Un clic en una librería o en una vulnerabilidad la copia al portapapeles: la librería con su salto y lo que la bloquea o la razón de Haiku, y la vulnerabilidad con su gravedad, el arreglo y el enlace a OSV.
 
-Al final del panel, **Actualizar rama** hace `git pull --ff-only` en la rama en la que estás. Solo avanza si la rama no se ha separado de la remota; si se separó, no toca nada y dice por qué. Lo ejecuta el mod directamente, sin pasar por los permisos de la app, y después vuelve a revisar las librerías.
+Al final del panel, **Actualizar rama** hace `git pull -r` en la rama en la que estás: trae lo nuevo de la remota y vuelve a poner encima tus commits locales. Si git no puede hacerlo (un conflicto o cambios sin commit), lo dice y muestra el motivo. Lo ejecuta el mod directamente, sin pasar por los permisos de la app, y después vuelve a revisar las librerías.
 
 ### Entorno
 Lo que enseña la barra de sesión de la app de escritorio, para que puedas ocultarla:

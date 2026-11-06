@@ -880,10 +880,11 @@ async function changeFolder($: EngineInterface): Promise<void> {
   }
 }
 
-// "Actualizar rama": a git pull of the checked-out branch, fast-forward only so
-// a branch that went its own way is left as it is and the reason shown. The mod
-// runs git itself, so the app asks no permission. Then the session and the
-// libraries are read again: the pull may bring other versions.
+// "Actualizar rama": a git pull -r of the checked-out branch, its own commits
+// replayed over the remote's; a pull git refuses (a conflict, uncommitted
+// changes) shows its reason. The mod runs git itself, so the app asks no
+// permission. Then the session and the libraries are read again: the pull may
+// bring other versions.
 const PULL_MS = 120_000
 
 async function pullBranch($: EngineInterface): Promise<void> {
@@ -891,7 +892,7 @@ async function pullBranch($: EngineInterface): Promise<void> {
   await update($, pull, () => ({ status: 'running' }) as Pull)
   const branch = (await read($, session)).branch
   try {
-    const ran = await runCommand($, ['git', 'pull', '--ff-only'], PULL_MS)
+    const ran = await runCommand($, ['git', 'pull', '-r'], PULL_MS)
     const value: Pull =
       ran.exitCode === 0
         ? { status: 'done', text: `Rama ${branch || 'actual'} actualizada: ${pullSummary(ran.stdout)}` }

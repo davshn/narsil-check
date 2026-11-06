@@ -4,6 +4,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { connectorLine, connectorsLabel, envLabel, parseConnectors, parseRemote, parseSession, pathOf, repositoryLabel, switchGlyph, webUrlOf } from '../hooks/session'
 import { NO_SESSION } from '../hooks/session'
+import { pullSummary } from '../hooks/words'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
 
@@ -292,8 +293,8 @@ test("a turn that used one of the app's session tools reads the app's servers ag
   expect(calls.filter(c => c.tool === 'get_session').length).toBe(2)
 })
 
-test('"Actualizar rama", last in the pane, pulls the checked-out branch and says how it went', async ($, on) => {
-  const git: Record<string, string> = { 'git pull --ff-only': 'Updating 1a2b3c4..5d6e7f8\nFast-forward\n README.md | 2 +-\n' }
+test('"Actualizar rama", last in the pane, pulls the checked-out branch with a rebase and says how it went', async ($, on) => {
+  const git: Record<string, string> = { 'git pull -r': 'Successfully rebased and updated refs/heads/feat/login.\n' }
   app(on, { state: 'off' }, 0, git)
   await opened($, on)
 
@@ -303,11 +304,18 @@ test('"Actualizar rama", last in the pane, pulls the checked-out branch and says
   await ui.press({ key: 'branch-pull' })
   await ui.unmount()
   ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /Rama feat\/login/ }))?.text).toBe('Rama feat/login actualizada: Fast-forward')
+  expect((await ui.find({ type: 'Text', text: /Rama feat\/login/ }))?.text).toBe('Rama feat/login actualizada: rebase hecho')
   await ui.unmount()
 })
 
-test('a pull that cannot fast-forward says why and changes nothing else', async ($, on) => {
+test('the words of each pull that went well', () => {
+  expect(pullSummary('Current branch main is up to date.\n')).toBe('ya estaba al día')
+  expect(pullSummary('Already up to date.\n')).toBe('ya estaba al día')
+  expect(pullSummary('Successfully rebased and updated refs/heads/main.\n')).toBe('rebase hecho')
+  expect(pullSummary('Updating 1a2b3c4..5d6e7f8\nFast-forward\n')).toBe('Fast-forward')
+})
+
+test('a pull that fails says why', async ($, on) => {
   app(on, { state: 'off' }, 0)
   await opened($, on)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })

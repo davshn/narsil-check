@@ -200,14 +200,16 @@ export function prNote(pr: Pr): { text: string; color: string } | undefined {
   }
 }
 
-// The last lines of a command's output: where its error usually is.
-// What a successful git pull did, in a few words: up to date, a fast-forward,
-// or its last line.
+// What a successful git pull -r did, in a few words: up to date, rebased,
+// a fast-forward, or its last line.
 export function pullSummary(stdout: string): string {
-  if (/Already up.to.date/i.test(stdout)) return 'ya estaba al día'
+  if (/up.to.date/i.test(stdout)) return 'ya estaba al día'
+  if (/Successfully rebased/i.test(stdout)) return 'rebase hecho'
   if (/Fast-forward/.test(stdout)) return 'Fast-forward'
   return tail(stdout, 1) || 'hecho'
 }
+
+// The last lines of a command's output: where its error usually is.
 
 export function tail(text: string, lines = 4): string {
   return text.trim().split(/\r?\n/).slice(-lines).join(' ').slice(0, 400)
