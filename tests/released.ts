@@ -20,6 +20,8 @@ const RELEASED = [
 
 export function released(url: string, young: Record<string, string> = {}): Response | undefined {
   if (!RELEASED.some(re => re.test(url))) return undefined
+  // As the Go proxy: a +incompatible version is not served under /vN.
+  if (/\/v\d+\/@v\/[^/]+\+incompatible\.info$/.test(url)) return { value: { status: 404, ok: false, headers: {}, text: 'not found' } }
   const at = Object.entries(young).find(([part]) => url.includes(part))?.[1] ?? OLD
   const text = JSON.stringify({
     urls: [{ upload_time_iso_8601: at }],

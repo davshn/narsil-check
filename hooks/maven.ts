@@ -8,7 +8,7 @@ import type { Adapter, Dep, Files } from './adapter'
 import { escapeRegex, globRegex } from './adapter'
 import { compare, parseVersion } from './semver'
 import type { Version } from './semver'
-import { WRAPPER, kmpConflicts } from './kmp'
+import { WRAPPERS, kmpConflicts } from './kmp'
 import { parseToml, tableOf } from './toml'
 import type { TomlTable, TomlValue } from './toml'
 
@@ -293,7 +293,7 @@ export const MAVEN: Adapter = {
   globs: [...GRADLE_GLOBS, POM_GLOB],
   lockfiles: [],
   // The wrapper's Gradle version, for what AGP and Kotlin need.
-  contextFiles: [WRAPPER],
+  contextFiles: WRAPPERS,
   parse: parseMaven,
   latestUrl: metadataUrl,
   // A Gradle plugin's own artifact (org.jlleitschuh.gradle:ktlint-gradle) is

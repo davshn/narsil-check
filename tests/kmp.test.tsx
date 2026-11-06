@@ -70,8 +70,23 @@ test('KSP from 2.3.12 needs AGP 8.12', () => {
 })
 
 test("the Maven adapter reads the wrapper as context, never commits it, and asks these rules", () => {
-  expect(MAVEN.contextFiles).toEqual([WRAPPER])
+  expect(MAVEN.contextFiles).toContain(WRAPPER)
   expect(MAVEN.lockfiles).not.toContain(WRAPPER)
   const deps = [dep(AGP_APP, '8.10.1'), dep(KMP, '2.2.20')]
   expect(MAVEN.conflictsOf?.(up(AGP_APP, '8.10.1', '8.13.0'), deps, wrapper('8.11.1'))).toEqual(['AGP 8.13.0 necesita Gradle 8.13 o más; el wrapper usa 8.11.1'])
+})
+
+test('artifacts under org.jetbrains.compose on their own version line are not Compose Multiplatform', () => {
+  const deps = [dep(AGP_APP, '8.13.0'), dep(KMP, '2.3.20')]
+  expect(kmpConflicts(up(pluginCoordinate('org.jetbrains.compose.hot-reload'), '1.0.0', '1.2.0'), deps, wrapper('8.14'))).toEqual([])
+  expect(kmpConflicts(up('org.jetbrains.compose.material3.adaptive:adaptive', '1.1.2', '1.2.0'), deps, wrapper('8.14'))).toEqual([])
+  // The plugin and the main line's libraries still are.
+  expect(kmpConflicts(up('org.jetbrains.compose.ui:ui', '1.9.0', '1.13.0'), deps, wrapper('8.14'))).toEqual(['Compose Multiplatform 1.13.0 es más nuevo que lo que sé de sus requisitos (hasta 1.12): confirma qué Kotlin y AGP necesita'])
+})
+
+test('a wrapper under android/, as a React Native project keeps it, gives the Gradle version too', () => {
+  const files = { [`android/${WRAPPER}`]: 'distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-bin.zip' }
+  expect(gradleVersionOf(files)).toBe('8.11.1')
+  expect(MAVEN.contextFiles).toContain(`android/${WRAPPER}`)
+  expect(kmpConflicts(up('com.android.tools.build:gradle', '8.10.1', '8.13.0'), [dep('com.android.tools.build:gradle', '8.10.1')], files)).toEqual(['AGP 8.13.0 necesita Gradle 8.13 o más; el wrapper usa 8.11.1'])
 })

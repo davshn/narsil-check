@@ -66,3 +66,8 @@ test("the mod's own wait says so, in every ecosystem", () => {
   expect(ageConflict(undefined, now, 1440, 'narsil')).toBe('No pude leer cuándo se publicó: Narsil Check espera 24 h antes de subirla')
   expect(ageConflict('2026-11-05T09:00:00Z', now, 1440, 'narsil')).toBeUndefined()
 })
+
+test('a Go +incompatible version lives at the base path, never under /vN', () => {
+  expect(majorPath('github.com/docker/docker', 'v28.5.2+incompatible')).toBe('github.com/docker/docker')
+  expect(GO.releasedUrls?.('github.com/docker/docker', 'v28.5.2+incompatible')).toEqual(['https://proxy.golang.org/github.com/docker/docker/@v/v28.5.2+incompatible.info'])
+})

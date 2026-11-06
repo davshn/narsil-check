@@ -8,6 +8,8 @@ import type { Dep, Files } from './adapter'
 import { compare, parseVersion } from './semver'
 
 export const WRAPPER = 'gradle/wrapper/gradle-wrapper.properties'
+// Where a project keeps it: at the root, or under android/ (React Native).
+export const WRAPPERS = [WRAPPER, `android/${WRAPPER}`]
 
 // AGP minor -> the minimum Gradle it runs on.
 // https://developer.android.com/build/releases/about-agp ("Update Gradle"),
@@ -50,7 +52,11 @@ const KSP_AGP = { from: '2.3.12', agp: '8.12.0' }
 
 const isAgp = (name: string) => /^com\.android\.tools\.build:gradle$/.test(name) || /^com\.android\.[\w.-]+:com\.android\.[\w.-]+\.gradle\.plugin$/.test(name)
 const isKotlinTool = (name: string) => /^org\.jetbrains\.kotlin[.:]/.test(name)
-const isCompose = (name: string) => /^org\.jetbrains\.compose[.:]/.test(name)
+// Compose Multiplatform's own line: its Gradle plugin and the libraries that
+// share its version. org.jetbrains.compose.hot-reload and material3.adaptive
+// keep versions of their own.
+const isCompose = (name: string) =>
+  name === 'org.jetbrains.compose:org.jetbrains.compose.gradle.plugin' || /^org\.jetbrains\.compose\.(runtime|foundation|ui|animation|material|components|desktop):/.test(name)
 const isKsp = (name: string) => /^com\.google\.devtools\.ksp[.:]/.test(name)
 const MULTIPLATFORM = 'org.jetbrains.kotlin.multiplatform:org.jetbrains.kotlin.multiplatform.gradle.plugin'
 const ANDROID_APP_OR_LIBRARY = /^com\.android\.(application|library):/
@@ -58,7 +64,8 @@ const KAPT = /^org\.jetbrains\.kotlin\.(kapt|plugin\.kapt):|^kotlin-kapt$/
 
 // The Gradle version the wrapper downloads, from its distributionUrl.
 export function gradleVersionOf(files: Files): string | undefined {
-  return /distributionUrl\s*=.*gradle-(\d+(?:\.\d+){0,2}(?:-[\w.]+)?)-(?:bin|all)\.zip/.exec(files[WRAPPER] ?? '')?.[1]
+  const text = WRAPPERS.map(path => files[path]).find(t => t !== undefined) ?? ''
+  return /distributionUrl\s*=.*gradle-(\d+(?:\.\d+){0,2}(?:-[\w.]+)?)-(?:bin|all)\.zip/.exec(text)?.[1]
 }
 
 const minor = (version: string) => /^(\d+\.\d+)/.exec(version)?.[1]

@@ -115,7 +115,7 @@ En un proyecto Android o Kotlin Multiplatform, estas herramientas dependen unas 
 
 | Sube | Necesita | Fuente |
 | --- | --- | --- |
-| Android Gradle Plugin | la versión de Gradle mínima de esa AGP, comparada con la que fija `gradle/wrapper/gradle-wrapper.properties`. Ejemplo: *"AGP 8.13.0 necesita Gradle 8.13 o más; el wrapper usa 8.11.1"* | [Google](https://developer.android.com/build/releases/about-agp) |
+| Android Gradle Plugin | la versión de Gradle mínima de esa AGP, comparada con la que fija `gradle/wrapper/gradle-wrapper.properties` (o `android/gradle/wrapper/…` en React Native). Ejemplo: *"AGP 8.13.0 necesita Gradle 8.13 o más; el wrapper usa 8.11.1"* | [Google](https://developer.android.com/build/releases/about-agp) |
 | AGP 9, desde 8.x | que ningún módulo combine `org.jetbrains.kotlin.multiplatform` con `com.android.library` o `com.android.application` (pasan a `com.android.kotlin.multiplatform.library`) y que no se use kapt | [Google](https://developer.android.com/build/migrate-to-built-in-kotlin) |
 | Kotlin | la AGP y el Gradle mínimos de su plugin de Gradle (Kotlin 2.4 necesita AGP 8.5.2) | [JetBrains](https://kotlinlang.org/docs/gradle-configure-project.html) |
 | Compose Multiplatform | el Kotlin mínimo para iOS y web (1.10 necesita Kotlin 2.2, 1.11 y 1.12 necesitan 2.3) y AGP 8.1 desde 1.7 | [JetBrains](https://github.com/JetBrains/compose-multiplatform/blob/master/CHANGELOG.md) |

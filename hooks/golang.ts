@@ -61,13 +61,15 @@ export function nextMajorPath(path: string, current: string): string {
 }
 
 // The module path a version lives at: from v2 on, the major is part of the
-// path (example.com/m/v5, gopkg.in/yaml.v3), whatever path declared it.
+// path (example.com/m/v5, gopkg.in/yaml.v3), whatever path declared it. A
+// +incompatible version (a v2+ tag on a module without go.mod's /vN) lives at
+// the base path: github.com/docker/docker@v28.5.2+incompatible.
 export function majorPath(path: string, version: string): string {
   const major = Number(/^v?(\d+)/.exec(version)?.[1] ?? 0)
   const gopkg = /^(gopkg\.in\/.+\.v)\d+$/.exec(path)
   if (gopkg) return `${gopkg[1]}${major}`
   const base = path.replace(/\/v\d+$/, '')
-  return major >= 2 ? `${base}/v${major}` : base
+  return major >= 2 && !version.endsWith('+incompatible') ? `${base}/v${major}` : base
 }
 
 export const GO: Adapter = {
