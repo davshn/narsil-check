@@ -77,7 +77,11 @@ export function auditSummary(findings: Finding[], checked: number): string {
 // Baby Narsil standing, as one SVG holding both pictures: the light one, and
 // the dark one shown only under a dark color scheme, so the picture follows
 // the app's theme with no word from the engine.
-export function narsilSvg(light: Art, dark: Art, height = 96): string {
+// Drawn as tall as Narsil stands in her own band (about 100 px), and given to
+// the Svg element too: without a size a surface stretches it to the pane.
+export const NARSIL_SIZE = { width: 71, height: 100 }
+
+export function narsilSvg(light: Art, dark: Art, height = NARSIL_SIZE.height): string {
   const box = { width: Math.max(light.width, dark.width), height: Math.max(light.height, dark.height) }
   const image = (art: Art, theme: string) =>
     `<image class="${theme}" href="${art.src}" x="${(box.width - art.width) / 2}" y="${box.height - art.height}" width="${art.width}" height="${art.height}"/>`

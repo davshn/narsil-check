@@ -56,7 +56,7 @@ import {
 } from './session'
 import type { Remote, SessionView, Task, Todos } from '../types'
 import { TODO_FILE, TOOL_ADD, TOOL_DONE, TOOL_LIST, TOOL_TEMPLATE, damagedPath, findTask, newTask, parseEntry, parseTodoFile, serializeTodos, templateArg, templateMatches, templatePrompt, todosColor, todosLabel, todosText, withExclude } from './todos'
-import { COMMAND, COMMAND_HELP, GROUPS, PALETTE, PANE, TITLE, agoLabel, auditSummary, commandHelp, groupLabel, narsilSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, sortUpgrades, summaryOf, tail } from './words'
+import { COMMAND, COMMAND_HELP, GROUPS, NARSIL_SIZE, PALETTE, PANE, TITLE, agoLabel, auditSummary, commandHelp, groupLabel, narsilSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, sortUpgrades, summaryOf, tail } from './words'
 import { PARADA_CLARO, PARADA_OSCURO } from './narsil-art'
 
 // Change a tag when its type's fields change: it declines what an earlier
@@ -1223,7 +1223,7 @@ export const register: Register = on => {
         <Text dimColor>· revisiones del proyecto</Text>
       </Box>
     )
-    const picture = Svg ? <Svg source={narsilSvg(PARADA_CLARO, PARADA_OSCURO)} alt="Narsil bebé" /> : null
+    const picture = Svg ? <Svg source={narsilSvg(PARADA_CLARO, PARADA_OSCURO)} alt="Narsil bebé" width={NARSIL_SIZE.width} height={NARSIL_SIZE.height} /> : null
     // The upgrade section's head: a toggle, its name in the color of what
     // most needs you, and its count when it has one.
     const color = sectionColor(state)

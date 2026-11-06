@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { GROUPS, PALETTE, commandHelp, sectionColor, sectionLabel } from '../hooks/words'
+import { GROUPS, NARSIL_SIZE, PALETTE, commandHelp, sectionColor, sectionLabel } from '../hooks/words'
 import { PARADA_CLARO, PARADA_OSCURO } from '../hooks/narsil-art'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
@@ -100,6 +100,10 @@ test('baby Narsil stands under the title, light or dark as the app is; the termi
   let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const picture = await ui.find({ type: 'Svg' })
   expect(picture?.props.alt).toBe('Narsil bebé')
+  // As tall as Narsil stands in her own band, never stretched to the pane.
+  expect(picture?.props.height).toBe(NARSIL_SIZE.height)
+  expect(picture?.props.width).toBe(NARSIL_SIZE.width)
+  expect(NARSIL_SIZE.height).toBe(100)
   const source = String(picture?.props.source)
   expect(source).toContain(PARADA_CLARO.src)
   expect(source).toContain(PARADA_OSCURO.src)
