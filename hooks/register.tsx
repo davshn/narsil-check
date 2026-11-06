@@ -1214,16 +1214,20 @@ export const register: Register = on => {
       await update($, isUpgradeOpen, value => !value)
     }
 
-    // The pane's own head, as Narsil's band: a colored dot and its name.
+    // The pane's own head, as Narsil's band: a colored dot and its name,
+    // centered across the pane.
     const head = (
-      <Box flexDirection="row" gap={1}>
+      <Box key="head" flexDirection="row" justifyContent="center">
         <Text bold color={PALETTE.info}>
           ● Narsil Check
         </Text>
-        <Text dimColor>· revisiones del proyecto</Text>
       </Box>
     )
-    const picture = Svg ? <Svg source={narsilSvg(PARADA_CLARO, PARADA_OSCURO)} alt="Narsil bebé" width={NARSIL_SIZE.width} height={NARSIL_SIZE.height} /> : null
+    const picture = Svg ? (
+      <Box key="narsil" flexDirection="row" justifyContent="center">
+        <Svg source={narsilSvg(PARADA_CLARO, PARADA_OSCURO)} alt="Narsil bebé" width={NARSIL_SIZE.width} height={NARSIL_SIZE.height} />
+      </Box>
+    ) : null
     // The upgrade section's head: a toggle, its name in the color of what
     // most needs you, and its count when it has one.
     const color = sectionColor(state)

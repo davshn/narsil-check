@@ -104,6 +104,10 @@ test('baby Narsil stands under the title, light or dark as the app is; the termi
   expect(picture?.props.height).toBe(NARSIL_SIZE.height)
   expect(picture?.props.width).toBe(NARSIL_SIZE.width)
   expect(NARSIL_SIZE.height).toBe(100)
+  // The title and the picture are centered across the pane; the title has no subtitle.
+  expect((await ui.find({ type: 'Box', key: 'head' }))?.props.justifyContent).toBe('center')
+  expect((await ui.find({ type: 'Box', key: 'narsil' }))?.props.justifyContent).toBe('center')
+  expect(await ui.find({ type: 'Text', text: /revisiones del proyecto/ })).toBeUndefined()
   const source = String(picture?.props.source)
   expect(source).toContain(PARADA_CLARO.src)
   expect(source).toContain(PARADA_OSCURO.src)

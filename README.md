@@ -24,7 +24,7 @@ Es un mod de Claude Code de **código abierto**, publicado bajo la licencia [GPL
 ## Funcionalidades
 
 ### El panel
-El panel se abre al empezar cada sesión, aunque no haya nada que revisar. Arriba dice **● Narsil Check**, con Narsil bebé debajo (en su versión clara u oscura, según el tema de la app; la terminal no dibuja imágenes), y después cada revisión como una sección que se pliega y se despliega con su cabecera (`▾ Actualizaciones · 3` / `▸ Actualizaciones · 3`). El punto de color de cada sección dice lo más urgente que tiene, con la paleta de Narsil: rojo si algo bloquea o falla, amarillo si algo te espera, verde si está al día y azul para lo informativo.
+El panel se abre al empezar cada sesión, aunque no haya nada que revisar. Arriba, centrados, están el título **● Narsil Check** y Narsil bebé debajo (en su versión clara u oscura, según el tema de la app; la terminal no dibuja imágenes), y después cada revisión como una sección que se pliega y se despliega con su cabecera (`▾ Actualizaciones · 3` / `▸ Actualizaciones · 3`). El punto de color de cada sección dice lo más urgente que tiene, con la paleta de Narsil: rojo si algo bloquea o falla, amarillo si algo te espera, verde si está al día y azul para lo informativo.
 
 Cada sesión empieza igual: **Entorno** desplegado, **Conectores** plegado, y **Actualizaciones**, **Vulnerabilidades** y **Pendientes** plegadas hasta que tienen algo, momento en que se despliegan solas.
 
