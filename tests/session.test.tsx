@@ -301,6 +301,8 @@ test('"Actualizar rama", last in the pane, pulls the checked-out branch with a r
   let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const buttons = (await ui.findAll({ type: 'Button' })).map(b => b.key)
   expect(buttons.at(-1)).toBe('branch-pull')
+  // Centered across the pane, under the last section.
+  expect((await ui.find({ type: 'Box', key: 'pull' }))?.props.justifyContent).toBe('center')
   await ui.press({ key: 'branch-pull' })
   await ui.unmount()
   ui = await $.ui.mount({ ...PANE, surface: 'desktop' })

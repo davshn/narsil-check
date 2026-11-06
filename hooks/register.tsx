@@ -1569,20 +1569,27 @@ export const register: Register = on => {
                 )}
               </Box>
             ))}
-            {Input && <Input key="todo-new" placeholder="Nueva tarea (nombre: contenido)" submitLabel="Agregar" value="" onSubmit={(text: string) => add(text)} />}
+            {Input && (
+              // A row of space from the list when there is one, so the field
+              // does not read as one more task.
+              <Box key="todo-form" marginTop={list.tasks.length > 0 ? 1 : 0}>
+                <Input key="todo-new" placeholder="Nueva tarea (nombre: contenido)" submitLabel="Agregar" value="" onSubmit={(text: string) => add(text)} />
+              </Box>
+            )}
             {!Input && list.tasks.length === 0 && <Text dimColor>No hay tareas pendientes.</Text>}
           </Box>
         )}
       </Box>
     )
 
-    // "Actualizar rama", last of all: a git pull of the checked-out branch.
+    // "Actualizar rama", last of all and centered across the pane: a git pull
+    // of the checked-out branch.
     const pulled = await read($, pull)
     const pullSection = (
-      <Box flexDirection="column" marginTop={1}>
+      <Box flexDirection="column" alignItems="center" marginTop={1}>
         {pulled.status === 'done' && <Text color={PALETTE.done}>{pulled.text}</Text>}
         {pulled.status === 'failed' && <Text color={PALETTE.error}>No pude actualizar la rama: {pulled.message}</Text>}
-        <Box flexDirection="row" gap={1}>
+        <Box key="pull" flexDirection="row" justifyContent="center" gap={1}>
           <Text dimColor>➜</Text>
           {pulled.status === 'running' ? <Text dimColor>Actualizando la rama…</Text> : <Button key="branch-pull" onPress={() => pullBranch($)}>Actualizar rama</Button>}
         </Box>

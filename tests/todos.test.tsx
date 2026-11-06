@@ -130,9 +130,12 @@ test('Pendientes starts folded when empty; a task added in the field is saved, k
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Button', key: 'section-todos' }))?.text).toBe('▸ Pendientes')
   await ui.press({ key: 'section-todos' })
+  // With no tasks the field sits right under the head; with tasks it keeps a row of space from the list.
+  expect((await ui.find({ type: 'Box', key: 'todo-form' }))?.props.marginTop).toBe(0)
   await ui.input({ key: 'todo-new', text: 'Subir TypeScript: revisar los tipos' })
   await ui.input({ key: 'todo-new', text: 'Revisar el README' })
   expect((await ui.find({ type: 'Button', key: 'section-todos' }))?.text).toBe('▾ Pendientes · 2')
+  expect((await ui.find({ type: 'Box', key: 'todo-form' }))?.props.marginTop).toBe(1)
   await ui.unmount()
 
   const tasks = parseTodos(fs.get(LIST))
