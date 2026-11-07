@@ -901,6 +901,17 @@ const errorText = (err: unknown) => (err instanceof Error ? err.message : String
 // `withServers: false` reads only the folder and git, keeping what the app's
 // servers last said: each call to them reaches every other mod as a tool call.
 // Resolves whether the app's servers answered.
+// The pull request bound to the session and Auto-fix, as ccd_pr answers.
+async function readPr($: EngineInterface): Promise<Pick<SessionView, 'autofix' | 'prUrl' | 'fixError'>> {
+  try {
+    const result = await $.mcp.call(PR_SERVER, PR_TOOL, { session_id: 'self' })
+    const read = result.isError ? undefined : parsePr(result.structuredContent ?? jsonOf(result.content))
+    return read ?? { autofix: 'unknown', fixError: textOf(result.content) || 'respuesta sin PR' }
+  } catch (err) {
+    return { autofix: 'unknown', fixError: errorText(err) }
+  }
+}
+
 async function loadSession($: EngineInterface, isFinal = true, withServers = true): Promise<boolean> {
   const cwd = await $.session.cwd().catch(() => '')
   const branch = await $.process
@@ -934,14 +945,7 @@ async function loadSession($: EngineInterface, isFinal = true, withServers = tru
     where = { remote: 'unknown', remoteError: errorText(err) }
   }
 
-  let pr: Pick<SessionView, 'autofix' | 'prUrl' | 'fixError'>
-  try {
-    const result = await $.mcp.call(PR_SERVER, PR_TOOL, { session_id: 'self' })
-    const read = result.isError ? undefined : parsePr(result.structuredContent ?? jsonOf(result.content))
-    pr = read ?? { autofix: 'unknown', fixError: textOf(result.content) || 'respuesta sin PR' }
-  } catch (err) {
-    pr = { autofix: 'unknown', fixError: errorText(err) }
-  }
+  const pr = await readPr($)
 
   const isRead = !connectors.connectorsError && !where.remoteError && !pr.fixError
   if (isRead || isFinal) {
@@ -972,7 +976,9 @@ let isPrTouched = false
 
 // The app may bind a pull request the turn opened or pushed only after the
 // turn has ended. While none shows, the app is asked again after each of
-// these waits, then no more: each call reaches every other mod.
+// these waits, then no more: each call reaches every other mod, so a retry
+// asks for the pull request alone. A newer round, or the session ending (a
+// /clear keeps the module loaded under a new session), stops the old one.
 const PR_RETRY_MS = [5_000, 10_000, 15_000] as const
 let prRetries = 0
 
@@ -981,7 +987,11 @@ async function retryPr($: EngineInterface): Promise<void> {
   for (const ms of PR_RETRY_MS) {
     await $.clock.sleep(ms)
     if (run !== prRetries || (await read($, session)).prUrl) return
-    await loadSession($)
+    const pr = await readPr($)
+    if (run !== prRetries || !pr.prUrl) continue
+    await setSession($, view => ({ ...view, ...pr }))
+    void watchCi($).catch(() => undefined)
+    return
   }
 }
 
@@ -1313,6 +1323,12 @@ export const register: Register = on => {
     // Opens on every session: it stands in for the app's session bar.
     await $.ui.open({ id: PANE, title: TITLE }).catch(() => undefined)
     if ((await detected($)).length > 0) void runScan($).catch(() => undefined)
+    return next(e)
+  })
+
+  // The pull request retries belong to the session that ends.
+  on('session.end', async (_, e, next) => {
+    prRetries++
     return next(e)
   })
 

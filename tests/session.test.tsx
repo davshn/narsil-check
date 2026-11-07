@@ -359,6 +359,47 @@ test('a turn that opened a pull request the app never binds asks the app again o
   expect(await fixSwitch($)).toBeUndefined()
 })
 
+test('the retries ask the app for the pull request alone, not the connectors or the session again', async ($, on) => {
+  const { calls } = app(on, { state: 'off' }, 0, {}, { state: 'merged', autoFix: false })
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('tool.call', () => ({ result: 'ok' }))
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  const clock = await opened($, on)
+  const others = () => calls.filter(c => c.tool !== 'get_status').length
+
+  await $.turn.start({ text: 'abre el PR', turnId: 't6' })
+  await $.tool.call({ tool: 'Bash', tool_use_id: 'b1', command: 'gh pr create --fill' })
+  await $.turn.complete({ turnId: 't6', reason: 'answer', answer: '', durationMs: 1, isAborted: false })
+  await clock.settle()
+  const atTurnEnd = others()
+  for (let i = 0; i < 10; i++) {
+    await clock.advance(60_000)
+    await clock.settle()
+  }
+  expect(others()).toBe(atTurnEnd)
+})
+
+test('a /clear stops the retries: the new session is not asked for the old one\'s pull request', async ($, on) => {
+  const { calls } = app(on, { state: 'off' }, 0, {}, { state: 'merged', autoFix: false })
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('tool.call', () => ({ result: 'ok' }))
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  const clock = await opened($, on)
+
+  await $.turn.start({ text: 'abre el PR', turnId: 't7' })
+  await $.tool.call({ tool: 'Bash', tool_use_id: 'b1', command: 'gh pr create --fill' })
+  await $.turn.complete({ turnId: 't7', reason: 'answer', answer: '', durationMs: 1, isAborted: false })
+  await clock.settle()
+  const atTurnEnd = calls.filter(c => c.tool === 'get_status').length
+  await $.session.end({ reason: 'clear', sessionId: 's1' })
+  for (let i = 0; i < 10; i++) {
+    await clock.advance(60_000)
+    await clock.settle()
+  }
+  expect(calls.filter(c => c.tool === 'get_status').length).toBe(atTurnEnd)
+})
+
 test('the pane opens with the session first: Entorno unfolded, then Conectores folded, above upgrades', async ($, on) => {
   app(on, { state: 'off' })
   await opened($, on)
