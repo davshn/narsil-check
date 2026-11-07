@@ -24,8 +24,8 @@ import type { Reason } from './explain'
 import { ADAPTERS, NPM, adapterOf, holdNote, manifestOf, manifestsOf, specChanges } from './ecosystems'
 import type { Adapter, Dep, Files } from './ecosystems'
 import { branchName, commitBody, commitTitle, isMainBranch, prBody, prUrlOf } from './git'
-import { EXPO_TABLE, LOCK, MANIFEST, NPMRC, WORKSPACE, ageConflict, ageRefusal, expoTableUrl, installedFromManifest, installedOf, latestUrl, packumentUrl, parseManifest, peerConflicts, pinConflicts, RELEASE_AGE, releaseAgeEnv, releaseAgeOf, upgradeOf, versionUrl } from './npm'
-import type { Declared, Found, Installed } from './npm'
+import { EXPO_TABLE, LOCK, MANIFEST, NPMRC, PNPM_LOCK, WORKSPACE, ageConflict, ageRefusal, expoTableUrl, installedFromManifest, installedOf, latestUrl, lockedPackage, packumentUrl, parseManifest, peerConflicts, pinConflicts, pnpmLocked, RELEASE_AGE, releaseAgeEnv, releaseAgeOf, upgradeOf, versionUrl } from './npm'
+import type { Declared, Found, Installed, LockedPackage } from './npm'
 import { baseOf, bumpOf, compare, parseVersion, satisfies, show } from './semver'
 import type { Version } from './semver'
 import {
@@ -639,11 +639,20 @@ async function scanNpm($: EngineInterface, isFresh: boolean): Promise<Scanned> {
   {
     const declared = parseManifest(await $.fs.read(MANIFEST))
     const lock = await readJson($, LOCK)
+    let pnpm = new Map<string, LockedPackage>()
+    try {
+      if (await $.fs.exists(PNPM_LOCK)) pnpm = pnpmLocked(await $.fs.read(PNPM_LOCK))
+    } catch {
+      // An unreadable pnpm-lock.yaml leaves node_modules as the only source.
+    }
     let failed = 0
     const installedMap = new Map<string, Installed>()
     const found = await pool(declared, CONCURRENCY, async (d: Declared): Promise<Found | undefined> => {
-      const installedPkg = (await readJson($, `node_modules/${d.name}/package.json`)) as { version?: string } | undefined
-      const installed = installedOf(d, lock, installedPkg?.version)
+      // node_modules first; with none installed, what the lockfiles record,
+      // so a project not installed yet is blocked by the same peers.
+      const fromModules = (await readJson($, `node_modules/${d.name}/package.json`)) as { version?: unknown } | undefined
+      const installedPkg = typeof fromModules?.version === 'string' ? fromModules : (lockedPackage(d.name, lock, pnpm) as { version?: unknown } | undefined)
+      const installed = installedOf(d, lock, typeof installedPkg?.version === 'string' ? installedPkg.version : undefined)
       if (!installed) return undefined
       installedMap.set(d.name, installedFromManifest(installedPkg, installed))
       try {

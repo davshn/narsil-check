@@ -153,6 +153,76 @@ export function installedFromManifest(manifest: unknown, version: Version): Inst
   return { version, peers, optional }
 }
 
+export const PNPM_LOCK = 'pnpm-lock.yaml'
+
+// One of the project's own packages as a lockfile records it: the version
+// it resolves to and the peers that version asks for, in a manifest's shape.
+export type LockedPackage = { version: string; peerDependencies: Record<string, string>; peerDependenciesMeta: Record<string, { optional: boolean }> }
+
+const unquote = (text: string) => text.trim().replace(/^(['"])(.*)\1$/, '$2')
+
+// What pnpm-lock.yaml (v9) says of the root project's dependencies. The
+// root importer gives each one's version ("1.0.0(eslint@9.39.5)" carries
+// the peers it was resolved with), the packages section its peers. pnpm 11
+// writes its own install as a first document, which has no dependencies.
+// Read line by line: the file is block YAML at fixed indents.
+export function pnpmLocked(text: string): Map<string, LockedPackage> {
+  const versions = new Map<string, string>()
+  const peers = new Map<string, Pick<LockedPackage, 'peerDependencies' | 'peerDependenciesMeta'>>()
+  let section = ''
+  let importer = ''
+  let field = ''
+  let dep = ''
+  let pkg = ''
+  let meta = ''
+  for (const line of text.split(/\r?\n/)) {
+    if (line.trim() === '' || line.trim() === '---') continue
+    const indent = line.length - line.trimStart().length
+    const body = line.slice(indent)
+    // A quoted key ('@scope/ui@2.1.0') ends at its closing quote.
+    const quote = body[0] === "'" || body[0] === '"' ? body.indexOf(body[0], 1) : -1
+    const colon = body.indexOf(':', quote + 1)
+    const key = unquote(colon < 0 ? body : body.slice(0, colon))
+    const value = colon < 0 ? '' : unquote(body.slice(colon + 1))
+    if (indent === 0) {
+      section = key
+      continue
+    }
+    if (section === 'importers') {
+      if (indent === 2) importer = key
+      else if (indent === 4) field = key
+      else if (indent === 6) dep = key
+      else if (indent === 8 && key === 'version' && importer === '.' && /^(dependencies|devDependencies|optionalDependencies)$/.test(field)) {
+        versions.set(dep, value.replace(/\(.*$/, ''))
+      }
+    } else if (section === 'packages') {
+      if (indent === 2) {
+        pkg = key
+        peers.set(pkg, { peerDependencies: {}, peerDependenciesMeta: {} })
+      } else if (indent === 4) field = key
+      else if (indent === 6 && field === 'peerDependencies') peers.get(pkg)!.peerDependencies[key] = value
+      else if (indent === 6 && field === 'peerDependenciesMeta') meta = key
+      else if (indent === 8 && field === 'peerDependenciesMeta' && key === 'optional') peers.get(pkg)!.peerDependenciesMeta[meta] = { optional: value === 'true' }
+    }
+  }
+  const locked = new Map<string, LockedPackage>()
+  for (const name of [...versions.keys()].sort()) {
+    const version = versions.get(name)!
+    locked.set(name, { version, ...(peers.get(`${name}@${version}`) ?? { peerDependencies: {}, peerDependenciesMeta: {} }) })
+  }
+  return locked
+}
+
+// A top-level package as the lockfiles record it, for a project whose
+// node_modules is not there (a repository just cloned or made from a
+// template): package-lock.json (v2 and v3) keeps each package's peers as
+// its manifest does, pnpm-lock.yaml as pnpmLocked reads them.
+export function lockedPackage(name: string, lock: unknown, pnpm: Map<string, LockedPackage>): Record<string, unknown> | undefined {
+  const entry = (lock as { packages?: Record<string, unknown> } | undefined)?.packages?.[`node_modules/${name}`]
+  if (entry && typeof entry === 'object') return entry as Record<string, unknown>
+  return pnpm.get(name)
+}
+
 // The registry's manifest of one version, where its peers are written.
 export function versionUrl(name: string, version: string): string {
   return `https://registry.npmjs.org/${name.replace('/', '%2F')}/${version}`

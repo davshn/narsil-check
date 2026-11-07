@@ -5,7 +5,7 @@ import type { Engine } from 'claude-code/testing'
 import { baseOf, bumpOf, parseVersion, satisfies } from '../hooks/semver'
 import type { Version } from '../hooks/semver'
 import { OLD } from './released'
-import { ageConflict, installArgv, installedFromManifest, isExactPin, releaseAgeOf, latestUrl, managerOf, parseManifest, peerConflicts, pinConflicts, rangeFor, upgradeOf } from '../hooks/npm'
+import { ageConflict, installArgv, installedFromManifest, isExactPin, lockedPackage, pnpmLocked, releaseAgeOf, latestUrl, managerOf, parseManifest, peerConflicts, pinConflicts, rangeFor, upgradeOf } from '../hooks/npm'
 import type { Installed } from '../hooks/npm'
 import { branchName, commitTitle, isMainBranch, prUrlOf } from '../hooks/git'
 import { specChanges } from '../hooks/ecosystems'
@@ -652,6 +652,108 @@ test('eslint 10 is blocked by the configs and plugins that stop at 9', () => {
 test('eslint-plugin-astro 3 is blocked by the eslint it needs', () => {
   const target = installedFromManifest({ peerDependencies: { eslint: '>=10.0.0', 'typescript-eslint': '>=8.61.0' } }, v('3.2.1'))
   expect(peerConflicts('eslint-plugin-astro', target, portfolio())).toEqual(['eslint-plugin-astro 3.2.1 necesita eslint >=10.0.0 (tienes 9.39.5)'])
+})
+
+// A pnpm-lock.yaml as pnpm 11 writes it: its own install first, then the
+// project's, each a document of its own.
+const PNPM_LOCK = [
+  '---',
+  "lockfileVersion: '9.0'",
+  '',
+  'importers:',
+  '',
+  '  .:',
+  '    packageManagerDependencies:',
+  '      pnpm:',
+  '        specifier: 12.6.0',
+  '        version: 12.6.0',
+  '',
+  'packages:',
+  '',
+  "  '@pnpm/exe@12.6.0':",
+  '    resolution: {integrity: sha512-x}',
+  '',
+  '---',
+  "lockfileVersion: '9.0'",
+  '',
+  'importers:',
+  '',
+  '  .:',
+  '    dependencies:',
+  "      '@scope/ui':",
+  '        specifier: ^2.0.0',
+  '        version: 2.1.0(eslint@9.39.5(jiti@2.7.0))',
+  '    devDependencies:',
+  '      eslint:',
+  '        specifier: ^9.0.0',
+  '        version: 9.39.5(jiti@2.7.0)',
+  '      eslint-plugin-x:',
+  '        specifier: ^1.0.0',
+  '        version: 1.0.0(eslint@9.39.5(jiti@2.7.0))',
+  '',
+  'packages:',
+  '',
+  "  '@scope/ui@2.1.0':",
+  '    resolution: {integrity: sha512-a}',
+  '    peerDependencies:',
+  "      eslint: '>=9'",
+  '      react: ^18 || ^19',
+  '    peerDependenciesMeta:',
+  '      react:',
+  '        optional: true',
+  '',
+  '  eslint-plugin-x@1.0.0:',
+  '    resolution: {integrity: sha512-b}',
+  '    peerDependencies:',
+  '      eslint: ^8 || ^9',
+  '',
+  '  eslint@9.39.5:',
+  '    resolution: {integrity: sha512-c}',
+  '    hasBin: true',
+  '',
+  'snapshots:',
+  '',
+  '  eslint-plugin-x@1.0.0(eslint@9.39.5(jiti@2.7.0)):',
+  '    dependencies:',
+  '      eslint: 9.39.5(jiti@2.7.0)',
+  '',
+].join('\n')
+
+test("pnpm-lock.yaml gives each of the project's packages its version and the peers it asks for", () => {
+  const locked = pnpmLocked(PNPM_LOCK)
+  expect([...locked.keys()]).toEqual(['@scope/ui', 'eslint', 'eslint-plugin-x'])
+  expect(locked.get('@scope/ui')).toEqual({ version: '2.1.0', peerDependencies: { eslint: '>=9', react: '^18 || ^19' }, peerDependenciesMeta: { react: { optional: true } } })
+  expect(locked.get('eslint-plugin-x')).toEqual({ version: '1.0.0', peerDependencies: { eslint: '^8 || ^9' }, peerDependenciesMeta: {} })
+  expect(locked.get('eslint')).toEqual({ version: '9.39.5', peerDependencies: {}, peerDependenciesMeta: {} })
+  expect(pnpmLocked('').size).toBe(0)
+})
+
+test('without node_modules, the lockfiles say what a package asks for', () => {
+  const lock = { packages: { 'node_modules/eslint-config-love': { version: '151.0.0', peerDependencies: { eslint: '^9.35.0' } } } }
+  expect(lockedPackage('eslint-config-love', lock, new Map())).toEqual({ version: '151.0.0', peerDependencies: { eslint: '^9.35.0' } })
+  expect(lockedPackage('eslint-plugin-x', undefined, pnpmLocked(PNPM_LOCK))?.peerDependencies).toEqual({ eslint: '^8 || ^9' })
+  expect(lockedPackage('nowhere', lock, pnpmLocked(PNPM_LOCK))).toBeUndefined()
+})
+
+test('a pnpm project with no node_modules still blocks an upgrade its installed plugins refuse', async ($, on) => {
+  const files = {
+    'package.json': JSON.stringify({ devDependencies: { eslint: '^9.0.0', 'eslint-plugin-x': '^1.0.0' } }),
+    'pnpm-lock.yaml': PNPM_LOCK,
+  }
+  project(on, files, { eslint: '10.0.0', 'eslint-plugin-x': '1.0.0' }, [], {
+    'https://registry.npmjs.org/eslint/10.0.0': JSON.stringify({ version: '10.0.0' }),
+  })
+  host(on)
+  on('ui.toast', () => ({ value: undefined }))
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Button', text: /Bloqueada/ }))?.text).toBe('▾ Bloqueada (1)')
+  expect((await ui.find({ type: 'Text', text: /exige eslint/ }))?.text).toBe('  eslint-plugin-x exige eslint ^8 || ^9')
+  // The version the lock resolved, not the one the range is written from.
+  expect((await ui.find({ type: 'Button', text: /^eslint / }))?.text).toBe('eslint 9.39.5 → 10.0.0 · dev')
+  await ui.unmount()
 })
 
 test('an upgrade every peer accepts has no conflicts', () => {

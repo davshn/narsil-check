@@ -65,7 +65,7 @@ Las versiones salen del registro de cada ecosistema, no de un modelo. Cada respu
 Solo en npm. Antes de clasificar una actualización, el panel hace tres comprobaciones con los datos del registro, de `node_modules` y de `package-lock.json`, sin usar un modelo:
 
 - **Lo que pide la versión nueva**: si `eslint-plugin-astro` 3.2.1 necesita `eslint >=10.0.0` y tienes eslint 9, no se puede subir sola.
-- **Lo que piden los paquetes instalados**: si `eslint-config-love` exige `eslint ^9.35.0`, eslint 10 no se puede subir sola.
+- **Lo que piden los paquetes instalados**: si `eslint-config-love` exige `eslint ^9.35.0`, eslint 10 no se puede subir sola. Se lee de `node_modules`; si todavía no instalaste (un repositorio recién clonado o creado desde una plantilla), de `package-lock.json` o `pnpm-lock.yaml`, así que el resultado es el mismo antes y después de instalar.
 - **Versiones fijadas en el árbol**: si un paquete instalado, aunque no lo declares tú, fija la librería en una versión exacta, subirla dejaría dos copias. Por ejemplo, `typescript-eslint` 8.71.0 fija `@typescript-eslint/parser` 8.71.0: subir el parser a 8.72.1 hace que ESLint cargue el plugin dos veces ("Cannot redefine plugin"). No cuenta si quien la fija sube en el mismo lote a la misma versión, como la familia `@tailwindcss/*` con `tailwindcss`. Un rango que no es una versión exacta (`^8.53.0`) no se marca: una copia anidada ahí suele ser inofensiva. Esta comprobación usa `package-lock.json`, así que con yarn, pnpm o bun no se hace.
 
 Cualquier actualización con un conflicto, sea de parche, menor o mayor, va al grupo **Bloqueada**, con cada conflicto escrito debajo, y el botón **Actualizar las N** nunca la incluye. Un peer que el proyecto no tiene instalado no cuenta como conflicto: es npm quien lo añade. Los conflictos se comparan con las versiones instaladas ahora; si subes varias juntas, puede que el bloqueo se resuelva entre ellas.
@@ -194,7 +194,7 @@ Claude busca la carpeta de la plantilla junto a este proyecto (sin distinguir ma
 
 | Ecosistema | Lee | Versión instalada | Registro | El botón ejecuta |
 | --- | --- | --- | --- | --- |
-| **npm** (JS, TS) y Expo | `package.json` | `node_modules`, luego `package-lock.json` | registry.npmjs.org | `npm install` (o pnpm, yarn, bun según el lockfile) |
+| **npm** (JS, TS) y Expo | `package.json` | `node_modules`, luego `package-lock.json` o `pnpm-lock.yaml` | registry.npmjs.org | `npm install` (o pnpm, yarn, bun según el lockfile) |
 | **PyPI** (Python) | `pyproject.toml` (PEP 621, grupos PEP 735, Poetry), `requirements.txt`, `requirements-dev.txt` | `uv.lock` o `poetry.lock`; si no, el pin `==` | pypi.org | reescribe el rango y luego `uv lock` o `poetry lock` |
 | **Go** | los `require` directos de `go.mod` | `go.mod` | proxy.golang.org | `go get módulo@versión` y `go mod tidy` |
 | **Cargo** (Rust) | `Cargo.toml` (dependencies, dev, build y target) | `Cargo.lock` | crates.io | reescribe el requisito y luego `cargo update -p` |
