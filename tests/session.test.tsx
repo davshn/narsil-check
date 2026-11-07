@@ -312,6 +312,53 @@ test('a turn that opened or pushed a pull request reads the app again: its PR sh
   expect(await fixSwitch($, 'desactivado')).toBe('desactivado')
 })
 
+test('a pull request the app binds after the turn ends still shows: the read is tried again a few times', async ($, on) => {
+  // The app binds the new PR only after the turn that opened it has ended.
+  const pr = { state: 'merged', autoFix: false }
+  const { calls } = app(on, { state: 'off' }, 0, {}, pr)
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('tool.call', () => ({ result: 'ok' }))
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  const clock = await opened($, on)
+
+  await $.turn.start({ text: 'abre el PR', turnId: 't4' })
+  await $.tool.call({ tool: 'Bash', tool_use_id: 'b1', command: 'gh pr create --fill' })
+  await $.turn.complete({ turnId: 't4', reason: 'answer', answer: '', durationMs: 1, isAborted: false })
+  await clock.settle()
+  expect(await fixSwitch($)).toBeUndefined()
+
+  pr.state = 'open'
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(await fixSwitch($, 'desactivado')).toBe('desactivado')
+
+  // Once the PR shows, the app is asked no more.
+  const asked = calls.filter(c => c.tool === 'get_status').length
+  await clock.advance(60_000)
+  await clock.settle()
+  expect(calls.filter(c => c.tool === 'get_status').length).toBe(asked)
+})
+
+test('a turn that opened a pull request the app never binds asks the app again only a few times', async ($, on) => {
+  const { calls } = app(on, { state: 'off' }, 0, {}, { state: 'merged', autoFix: false })
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('tool.call', () => ({ result: 'ok' }))
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  const clock = await opened($, on)
+  const before = calls.filter(c => c.tool === 'get_status').length
+
+  await $.turn.start({ text: 'pushea', turnId: 't5' })
+  await $.tool.call({ tool: 'Bash', tool_use_id: 'b1', command: 'git push -u origin feat/login' })
+  await $.turn.complete({ turnId: 't5', reason: 'answer', answer: '', durationMs: 1, isAborted: false })
+  for (let i = 0; i < 10; i++) {
+    await clock.advance(60_000)
+    await clock.settle()
+  }
+  // The read as the turn ends, then three more.
+  expect(calls.filter(c => c.tool === 'get_status').length - before).toBe(4)
+  expect(await fixSwitch($)).toBeUndefined()
+})
+
 test('the pane opens with the session first: Entorno unfolded, then Conectores folded, above upgrades', async ($, on) => {
   app(on, { state: 'off' })
   await opened($, on)

@@ -968,6 +968,22 @@ const SHELL_TOOLS = /^(Bash|PowerShell)$/
 const PR_COMMANDS = /\b(gh\s+pr\s|git\s+push\b)/
 let isInTurn = false
 let isSessionTouched = false
+let isPrTouched = false
+
+// The app may bind a pull request the turn opened or pushed only after the
+// turn has ended. While none shows, the app is asked again after each of
+// these waits, then no more: each call reaches every other mod.
+const PR_RETRY_MS = [5_000, 10_000, 15_000] as const
+let prRetries = 0
+
+async function retryPr($: EngineInterface): Promise<void> {
+  const run = ++prRetries
+  for (const ms of PR_RETRY_MS) {
+    await $.clock.sleep(ms)
+    if (run !== prRetries || (await read($, session)).prUrl) return
+    await loadSession($)
+  }
+}
 
 async function loadSessionAtStart($: EngineInterface): Promise<void> {
   isStartPending = false
@@ -1308,6 +1324,7 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       isInTurn = true
       isSessionTouched = false
+      isPrTouched = false
       if (isStartPending) {
         isStartPending = false
         void loadSession($).catch(() => undefined)
@@ -1318,7 +1335,9 @@ export const register: Register = on => {
 
   on('tool.call', async ($, e, next) => {
     const command = (e as { command?: unknown }).command
-    if (isInTurn && (SESSION_TOOLS.test(e.tool) || (SHELL_TOOLS.test(e.tool) && typeof command === 'string' && PR_COMMANDS.test(command)))) isSessionTouched = true
+    const isPrCommand = SHELL_TOOLS.test(e.tool) && typeof command === 'string' && PR_COMMANDS.test(command)
+    if (isInTurn && (SESSION_TOOLS.test(e.tool) || isPrCommand)) isSessionTouched = true
+    if (isInTurn && isPrCommand) isPrTouched = true
     return next(e)
   })
 
@@ -1328,8 +1347,14 @@ export const register: Register = on => {
       isInTurn = false
       const view = await read($, session)
       const withServers = isSessionTouched || Boolean(view.remoteError || view.connectorsError || view.fixError)
+      const isPrOpened = isPrTouched
       isSessionTouched = false
-      void loadSession($, true, withServers).catch(() => undefined)
+      isPrTouched = false
+      void loadSession($, true, withServers)
+        .then(async () => {
+          if (isPrOpened && !(await read($, session)).prUrl) await retryPr($)
+        })
+        .catch(() => undefined)
     }
     return result
   })
