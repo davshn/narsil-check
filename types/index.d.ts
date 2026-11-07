@@ -114,9 +114,20 @@ export type SessionView = {
   // Auto-fix: the app wakes the session when the PR's CI fails.
   autofix: Autofix
   prUrl?: string
+  // The open pull request's repository (owner/name) and head branch.
+  prRepo?: string
+  prHead?: string
   fixError?: string
   isFixSwitching: boolean
 }
+
+// The CI of the session's pull request: GitHub Actions' runs of its newest
+// commit, each job and its steps. `isWaiting`: the branch has a commit no
+// run has picked up yet.
+export type CiStep = { name: string; status: string; conclusion: string }
+export type CiJob = CiStep & { steps: CiStep[] }
+export type CiRun = { id: number; name: string; status: string; conclusion: string; jobs: CiJob[] }
+export type CiView = { status: 'idle' | 'loading' | 'ready'; runs: CiRun[]; isWaiting?: boolean; error?: string }
 
 // A pending task: a name, and optionally what it is about. The list lives in
 // the project's untracked .atl/narsil-check/pendientes.json.
@@ -139,6 +150,8 @@ declare module 'claude-code' {
       session: Shaped<SessionView>
       isEnvOpen: Shaped<boolean>
       isConnectorsOpen: Shaped<boolean>
+      ci: Shaped<CiView>
+      isCiOpen: Shaped<boolean>
       todos: Shaped<Todos>
       isTodosOpen: Shaped<boolean>
       openTodos: Shaped<string[]>

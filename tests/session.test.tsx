@@ -62,6 +62,7 @@ function app(on: On, remote: { state: string }, failures = 0, git: Record<string
       return text({
         bound: true,
         pr: { number: 2, url: 'https://github.com/davshn/app/pull/2', repo: 'davshn/app', state: pr.state, base: 'main', head: 'feat/login' },
+        checks: { available: true, passing: 0, failing: 0, pending: 1, skipped: 0, failingChecks: [] },
         monitor: { auto_fix: pr.autoFix, address_comments: pr.autoFix, auto_merge: false, auto_archive_on_close: false },
       })
     }
@@ -194,6 +195,95 @@ test("the Auto-fix switch, as Remote Control's, turns the PR's CI monitor on thr
   await ui.unmount()
   expect(await fixSwitch($, 'desactivado')).toBe('desactivado')
   expect(calls.filter(c => c.tool === 'set_monitor').map(c => c.args.auto_fix)).toEqual([true, false])
+})
+
+// What gh answers for the open PR's CI: one run of the branch's newest
+// commit, its steps as given.
+const RUN_LIST = 'gh run list --repo davshn/app --branch feat/login --json databaseId,headSha,workflowName,status,conclusion --limit 20'
+const RUN_VIEW = 'gh run view 11 --repo davshn/app --json jobs'
+function ciGit(status: string, conclusion: string, steps: [string, string, string][]): Record<string, string> {
+  return {
+    [RUN_LIST]: JSON.stringify([
+      { databaseId: 11, headSha: 'abc', workflowName: 'CI', status, conclusion },
+      { databaseId: 9, headSha: 'old', workflowName: 'CI', status: 'completed', conclusion: 'failure' },
+    ]),
+    [RUN_VIEW]: JSON.stringify({
+      jobs: [{ name: 'quality', status, conclusion, steps: [['Set up job', 'completed', 'success'], ...steps].map(([name, s, c], i) => ({ name, status: s, conclusion: c, number: i + 1 })) }],
+    }),
+    'git rev-parse @{upstream}': 'abc\n',
+  }
+}
+
+// The texts of the pane once `pattern` shows on a button, as Entorno draws them.
+async function shown($: Engine, pattern: RegExp): Promise<{ buttons: string[]; texts: string[] }> {
+  let buttons: string[] = []
+  let texts: string[] = []
+  for (let i = 0; i < 100; i++) {
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    buttons = (await ui.findAll({ type: 'Button' })).map(b => b.text)
+    texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+    await ui.unmount()
+    if (buttons.some(b => pattern.test(b))) break
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 10))
+  }
+  return { buttons, texts }
+}
+
+test("the CI fold, under Remote Control, shows the PR's run step by step and follows it until it ends", async ($, on) => {
+  const git = ciGit('in_progress', '', [
+    ['Checkout', 'completed', 'success'],
+    ['Lint', 'completed', 'success'],
+    ['Typecheck', 'in_progress', ''],
+    ['Build', 'queued', ''],
+    ['Post Checkout', 'queued', ''],
+  ])
+  const { calls } = app(on, { state: 'off' }, 0, git, { state: 'open', autoFix: false })
+  const clock = await opened($, on)
+
+  let pane = await shown($, /CI · 2\/4/)
+  expect(pane.buttons.slice(0, 6)).toEqual(['▾ Entorno', 'E:\\Proyectos\\app', 'feat/login', 'desactivado', '▾ CI · 2/4 · Typecheck', 'desactivado'])
+  expect(pane.texts.filter(t => /^ {2}[✓◐○✗–] /.test(t))).toEqual(['  ✓ Checkout', '  ✓ Lint', '  ◐ Typecheck', '  ○ Build'])
+  expect(calls.filter(c => c.tool === 'get_status').length).toBe(1)
+
+  // While it runs, gh is asked again every ten seconds, without the app.
+  Object.assign(git, ciGit('completed', 'success', [
+    ['Checkout', 'completed', 'success'],
+    ['Lint', 'completed', 'success'],
+    ['Typecheck', 'completed', 'success'],
+    ['Build', 'completed', 'success'],
+  ]))
+  await clock.advance(10_000)
+  pane = await shown($, /CI · pasó/)
+  expect(pane.buttons).toContain('▾ CI · pasó')
+  expect(pane.texts.filter(t => /^ {2}[✓◐○✗–] /.test(t))).toEqual(['  ✓ Checkout', '  ✓ Lint', '  ✓ Typecheck', '  ✓ Build'])
+  expect(calls.filter(c => c.tool === 'get_status').length).toBe(1)
+})
+
+test('the CI fold folds its steps away and stays folded', async ($, on) => {
+  app(on, { state: 'off' }, 0, ciGit('completed', 'failure', [['Lint', 'completed', 'failure']]), { state: 'open', autoFix: false })
+  await opened($, on)
+  await shown($, /CI · falló/)
+
+  let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: '  ✗ Lint' }))?.text).toBe('  ✗ Lint')
+  await ui.press({ key: 'section-ci' })
+  await ui.unmount()
+  const pane = await shown($, /▸ CI · falló/)
+  expect(pane.buttons).toContain('▸ CI · falló')
+  expect(pane.texts).not.toContain('  ✗ Lint')
+
+  ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'section-ci' })
+  await ui.unmount()
+  expect((await shown($, /▾ CI · falló/)).texts).toContain('  ✗ Lint')
+})
+
+test('a CI gh cannot read says why in its fold', async ($, on) => {
+  app(on, { state: 'off' }, 0, {}, { state: 'open', autoFix: false })
+  await opened($, on)
+  const pane = await shown($, /CI · sin leer/)
+  expect(pane.buttons).toContain('▾ CI · sin leer')
+  expect(pane.texts.some(t => /^No pude leer el CI con gh: /.test(t))).toBe(true)
 })
 
 test('with no open pull request, Auto-fix says so and cannot be pressed', async ($, on) => {

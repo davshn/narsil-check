@@ -41,6 +41,7 @@ Lo que enseña la barra de sesión de la app de escritorio, para que puedas ocul
 | **Carpeta** | La carpeta de trabajo de la sesión. | Abre el selector de carpetas y mueve la sesión a la que elijas. |
 | **Rama** | La rama de git actual. | Abre una pestaña de terminal en la carpeta de trabajo. |
 | **Control remoto** | Un interruptor: `●━━ desactivado` en gris, `━━● activado` en verde. | Lo activa o lo desactiva. |
+| **CI** | Solo con un PR abierto: los pasos de GitHub Actions del último commit de su rama (`✓ Lint`, `◐ Typecheck`, `○ Build`, `✗` si falló), sin los pasos internos de GitHub (`Set up job`, `Post …`). La línea resume el avance: `CI · 2/4 · Typecheck`, `CI · pasó`, `CI · falló`, o `esperando el CI del último push` si la rama tiene un commit que ningún run tomó todavía. Mientras corre, se vuelve a leer cada 10 segundos con `gh` y se deja de leer al terminar. | Pliega o despliega los pasos; queda como lo dejaste. |
 | **Auto-fix** | Un interruptor igual para el PR abierto de la sesión: con él activado, la app despierta a Claude cuando falla el CI, hay un conflicto o llega un comentario de revisión. Sin PR abierto dice `sin PR abierto`. | Lo activa o lo desactiva; la app puede pedirte permiso antes. |
 
 ### Conectores
@@ -255,6 +256,7 @@ Actualizaciones y Vulnerabilidades funcionan dondequiera que Claude Code dibuje 
 | Actualizaciones y Vulnerabilidades | Sí | Sí |
 | Entorno y Conectores | Sí | No: la sección dice por qué no pudo leerlos |
 | Control remoto y Auto-fix | Sí | No |
+| CI del PR | Sí, con `gh` instalado y con sesión iniciada; si falta, el pliegue dice por qué | No |
 | Clic en la carpeta y en la rama | Sí | No |
 | Pendientes | Sí | Sí; en la app móvil no hay campo para escribir: las tareas se añaden pidiéndoselo a Claude |
 
@@ -273,6 +275,7 @@ claude plugin test .
 - `hooks/register.tsx`: los hooks del mod (el panel, sus secciones, los botones y los comandos).
 - `hooks/words.ts`: cómo lo dice el panel (nombres de las secciones, colores, resúmenes, ayuda del comando).
 - `hooks/session.ts`: la sección de la sesión (Entorno, Conectores y los interruptores del control remoto y del Auto-fix).
+- `hooks/ci.ts`: el CI del PR paso a paso (los runs y pasos que da `gh`, sus marcas y el resumen del pliegue).
 - `hooks/todos.ts`: Pendientes (el archivo de la lista, el formato `nombre: contenido`, la exclusión de git y la búsqueda de plantillas).
 - `hooks/ecosystems.ts` y `hooks/adapter.ts`: la lista de ecosistemas y lo que cada uno tiene que saber hacer.
 - `hooks/npm.ts`, `pypi.ts`, `golang.ts`, `cargo.ts`, `pub.ts`, `maven.ts`, `nuget.ts`, `rubygems.ts` y `swiftpm.ts`: cada ecosistema (leer el manifest, preguntar al registro y reescribir la versión).

@@ -41,12 +41,15 @@ const REMOTES: readonly Remote[] = ['on', 'off', 'connecting', 'unavailable']
 
 // Whether Auto-fix watches the session's pull request, from ccd_pr's
 // get_status: only an open one can be watched, and switching needs its url.
-export function parsePr(value: unknown): { autofix: Autofix; prUrl?: string } | undefined {
+// The repository and head branch come along for the CI fold.
+export function parsePr(value: unknown): { autofix: Autofix; prUrl?: string; prRepo?: string; prHead?: string } | undefined {
   if (typeof value !== 'object' || value === null) return undefined
-  const v = value as { bound?: unknown; pr?: { url?: unknown; state?: unknown }; monitor?: { auto_fix?: unknown } }
+  const v = value as { bound?: unknown; pr?: { url?: unknown; state?: unknown; repo?: unknown; head?: unknown }; monitor?: { auto_fix?: unknown } }
   const url = v.pr?.url
   if (v.bound !== true || v.pr?.state !== 'open' || typeof url !== 'string') return { autofix: 'none' }
-  return { autofix: v.monitor?.auto_fix === true ? 'on' : 'off', prUrl: url }
+  const repo = typeof v.pr.repo === 'string' ? v.pr.repo : undefined
+  const head = typeof v.pr.head === 'string' ? v.pr.head : undefined
+  return { autofix: v.monitor?.auto_fix === true ? 'on' : 'off', prUrl: url, ...(repo ? { prRepo: repo } : {}), ...(head ? { prHead: head } : {}) }
 }
 
 type Block = { type: string; text?: string }

@@ -60,7 +60,8 @@ import {
   parseSession,
   textOf,
 } from './session'
-import type { Remote, SessionView, Task, Todos } from '../types'
+import type { CiRun, CiView, Remote, SessionView, Task, Todos } from '../types'
+import { CI_POLL_MS, CI_WAIT_POLLS, ciLabel, ciMark, isGoing, jobsOf, latestRuns, markOf, runListArgv, runViewArgv } from './ci'
 import { TODO_FILE, TOOL_ADD, TOOL_DONE, TOOL_LIST, TOOL_TEMPLATE, damagedPath, findTask, newTask, parseEntry, parseTodoFile, serializeTodos, templateArg, templateMatches, templatePrompt, todosColor, todosLabel, todosText, withExclude } from './todos'
 import { COMMAND, COMMAND_HELP, GROUPS, HEALTH_SIZE, NARSIL_SIZE, PALETTE, PANE, TITLE, agoLabel, auditSummary, commandHelp, groupLabel, healthOf, healthSvg, narsilSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, sortUpgrades, summaryOf, tail } from './words'
 import { PARADA_CLARO, PARADA_OSCURO } from './narsil-art'
@@ -84,10 +85,15 @@ const OSV_MS = 30_000
 // Whether the upgrade section is open; kept in the store across sessions.
 const isUpgradeOpen = atom({ plugin: 'narsil-check', key: 'isUpgradeOpen' } as const, false, { shape: 'open-1' })
 // The session section: what the app's session bar shows, and its two folds.
-const session = atom({ plugin: 'narsil-check', key: 'session' } as const, NO_SESSION, { shape: 'session-2' })
+const session = atom({ plugin: 'narsil-check', key: 'session' } as const, NO_SESSION, { shape: 'session-3' })
 const isEnvOpen = atom({ plugin: 'narsil-check', key: 'isEnvOpen' } as const, true, { shape: 'open-1' })
 const isConnectorsOpen = atom({ plugin: 'narsil-check', key: 'isConnectorsOpen' } as const, false, { shape: 'open-1' })
 const SESSION_MS = 15_000
+// The CI of the session's pull request, and whether its fold shows the
+// steps; the fold keeps how you left it across sessions.
+const ci = atom({ plugin: 'narsil-check', key: 'ci' } as const, { status: 'idle', runs: [] } as CiView, { shape: 'ci-1' })
+const isCiOpen = atom({ plugin: 'narsil-check', key: 'isCiOpen' } as const, true, { shape: 'open-1' })
+const GH_MS = 30_000
 // Pendientes: the list, whether it is unfolded, and the tasks whose content shows.
 const todos = atom({ plugin: 'narsil-check', key: 'todos' } as const, { isLoaded: false, tasks: [] } as Todos, { shape: 'todos-2' })
 const isTodosOpen = atom({ plugin: 'narsil-check', key: 'isTodosOpen' } as const, false, { shape: 'open-1' })
@@ -940,6 +946,7 @@ async function loadSession($: EngineInterface, isFinal = true, withServers = tru
   const isRead = !connectors.connectorsError && !where.remoteError && !pr.fixError
   if (isRead || isFinal) {
     await setSession($, view => ({ isLoaded: true, repository, cwd, branch, ...connectors, ...where, ...pr, isSwitching: view.isSwitching, isFixSwitching: view.isFixSwitching }))
+    void watchCi($).catch(() => undefined)
   }
   return isRead
 }
@@ -985,6 +992,56 @@ async function switchRemote($: EngineInterface, enabled: boolean): Promise<void>
   if (!remoteError) {
     $.ui.toast(enabled ? 'Control remoto activado.' : 'Control remoto desactivado.')
     await loadSession($)
+  }
+}
+
+// The CI of the session's open pull request, from gh: the runs of its
+// branch's newest commit and each one's steps. When the checked-out branch
+// is the PR's and its upstream has a commit no run shows yet, the CI is
+// still to start.
+async function readCi($: EngineInterface, view: SessionView): Promise<CiView> {
+  const repo = view.prRepo
+  const head = view.prHead
+  if (!repo || !head) return { status: 'ready', runs: [] }
+  try {
+    const list = await $.process.run(runListArgv(repo, head), { timeoutMs: GH_MS })
+    if (list.exitCode !== 0) return { status: 'ready', runs: [], error: list.stderr.trim() || `gh terminó con el código ${list.exitCode}` }
+    const { sha, runs } = latestRuns(list.stdout)
+    const full: CiRun[] = []
+    for (const listed of runs) {
+      const viewed = await $.process.run(runViewArgv(repo, listed.id), { timeoutMs: GH_MS })
+      full.push({ ...listed, jobs: viewed.exitCode === 0 ? jobsOf(viewed.stdout) : [] })
+    }
+    let isWaiting = false
+    if (view.branch === head) {
+      const upstream = await $.process.run(['git', 'rev-parse', '@{upstream}'], { timeoutMs: SESSION_MS })
+      isWaiting = upstream.exitCode === 0 && upstream.stdout.trim() !== '' && upstream.stdout.trim() !== sha
+    }
+    return { status: 'ready', runs: full, ...(isWaiting ? { isWaiting } : {}) }
+  } catch (err) {
+    return { status: 'ready', runs: [], error: errorText(err) }
+  }
+}
+
+// Follows the CI while its fold is open: read now, then every ten seconds
+// while a run goes or a push waits for one; it stops once the CI ends. A
+// newer watch, from the next read of the session, takes over.
+let ciWatch = 0
+async function watchCi($: EngineInterface): Promise<void> {
+  const id = ++ciWatch
+  let waits = 0
+  for (;;) {
+    const view = await read($, session)
+    if (!view.prUrl || !(await read($, isCiOpen))) return
+    await update($, ci, current => (current.status === 'ready' ? current : { ...current, status: 'loading' }))
+    let next = await readCi($, view)
+    if (id !== ciWatch) return
+    // A push no workflow answers (a repository with no CI for it) stops waiting.
+    if (next.isWaiting && ++waits > CI_WAIT_POLLS) next = { ...next, isWaiting: false }
+    await update($, ci, () => next)
+    if (next.error || !(next.isWaiting || isGoing(next.runs))) return
+    await $.clock.sleep(CI_POLL_MS)
+    if (id !== ciWatch) return
   }
 }
 
@@ -1418,6 +1475,13 @@ export const register: Register = on => {
     const down = view.connectors.filter(c => c.status !== 'connected')
     const knob = switchGlyph(view)
     const fix = fixGlyph(view)
+    const ciView = await read($, ci)
+    const ciOpen = await read($, isCiOpen)
+    const ciDot = ciMark(ciView)
+    const toggleCi = async () => {
+      const open = await update($, isCiOpen, value => !value)
+      if (open) await watchCi($)
+    }
     const sessionSection = (
       <Box flexDirection="column">
         <Box key="panel-session" {...panel(view.isLoaded ? PALETTE.info : PALETTE.muted)}>
@@ -1462,6 +1526,39 @@ export const register: Register = on => {
                   )}
                 </Box>
                 {view.remoteError && <Text color={PALETTE.error}>No pude leer o cambiar el control remoto: {view.remoteError}</Text>}
+                {view.prUrl && (
+                  <Box flexDirection="column">
+                    <Box flexDirection="row" gap={1}>
+                      <Text bold color={ciDot.color}>
+                        {ciDot.mark}
+                      </Text>
+                      <Button key="section-ci" plain label={ciLabel(ciOpen, ciView)} onPress={toggleCi} />
+                    </Box>
+                    {ciOpen && ciView.error && <Text color={PALETTE.error}>No pude leer el CI con gh: {ciView.error}</Text>}
+                    {ciOpen &&
+                      ciView.runs.map(ciRun => (
+                        <Box key={`ci-run-${ciRun.id}`} flexDirection="column">
+                          {ciView.runs.length > 1 && <Text dimColor>{ciRun.name}</Text>}
+                          {ciRun.jobs.map((ciJob, j) => {
+                            const jobMark = markOf(ciJob.status, ciJob.conclusion)
+                            return (
+                              <Box key={`ci-job-${ciRun.id}-${j}`} flexDirection="column">
+                                {ciRun.jobs.length > 1 && <Text color={jobMark.color}>{`${jobMark.mark} ${ciJob.name}`}</Text>}
+                                {ciJob.steps.map((ciStep, s) => {
+                                  const stepMark = markOf(ciStep.status, ciStep.conclusion)
+                                  return (
+                                    <Text key={`ci-step-${ciRun.id}-${j}-${s}`} color={stepMark.color}>
+                                      {`  ${stepMark.mark} ${ciStep.name}`}
+                                    </Text>
+                                  )
+                                })}
+                              </Box>
+                            )
+                          })}
+                        </Box>
+                      ))}
+                  </Box>
+                )}
                 <Box flexDirection="row" gap={1}>
                   <Text dimColor>Auto-fix</Text>
                   <Text bold color={fix.color}>
