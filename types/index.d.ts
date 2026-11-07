@@ -91,10 +91,15 @@ export type Audit =
 
 // What the desktop app's session bar shows, read from its own MCP servers:
 // the project's repository (its web address, from git's origin), its folder
-// and branch, its connectors and whether Remote Control is on.
-// `connectorsError` and `remoteError` say why a read or a switch failed.
+// and branch, its connectors, whether Remote Control is on and whether
+// Auto-fix watches its pull request's CI.
+// `connectorsError`, `remoteError` and `fixError` say why a read or a
+// switch failed.
 export type Connector = { name: string; status: string; tools?: number }
 export type Remote = 'on' | 'off' | 'connecting' | 'unavailable' | 'unknown'
+// The CI monitor of the session's pull request: on or off for an open one,
+// `none` with no open pull request bound to the session.
+export type Autofix = 'on' | 'off' | 'none' | 'unknown'
 export type SessionView = {
   isLoaded: boolean
   repository: string
@@ -106,6 +111,11 @@ export type SessionView = {
   remote: Remote
   remoteError?: string
   isSwitching: boolean
+  // Auto-fix: the app wakes the session when the PR's CI fails.
+  autofix: Autofix
+  prUrl?: string
+  fixError?: string
+  isFixSwitching: boolean
 }
 
 // A pending task: a name, and optionally what it is about. The list lives in

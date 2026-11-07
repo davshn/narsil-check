@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { connectorLine, connectorsLabel, envLabel, parseConnectors, parseRemote, parseSession, pathOf, repositoryLabel, switchGlyph, webUrlOf } from '../hooks/session'
+import { connectorLine, connectorsLabel, envLabel, fixGlyph, parseConnectors, parsePr, parseRemote, parseSession, pathOf, repositoryLabel, switchGlyph, webUrlOf } from '../hooks/session'
 import { NO_SESSION } from '../hooks/session'
 import { pullSummary } from '../hooks/words'
 
@@ -28,7 +28,9 @@ const CONNECTORS = {
 // A project with no manifests, and the desktop app's servers standing in.
 // `failures`: how many calls to the app's servers fail before they answer.
 // `git`: what git answers, which a test may change between reads.
-function app(on: On, remote: { state: string }, failures = 0, git: Record<string, string> = {}) {
+// `pr`: the pull request bound to the session, as ccd_pr's get_status
+// answers it; none bound when left out.
+function app(on: On, remote: { state: string }, failures = 0, git: Record<string, string> = {}, pr?: { state: string; autoFix: boolean }) {
   let failed = 0
   const calls: { server: string; tool: string; args: Record<string, unknown> }[] = []
   on('fs.exists', () => ({ value: false }))
@@ -55,6 +57,18 @@ function app(on: On, remote: { state: string }, failures = 0, git: Record<string
     if (e.tool === 'change_directory') return text('Moved')
     if (e.tool === 'open_terminal_tab') return text({ tab_id: '3' })
     if (e.tool === 'get_session') return text({ isRemote: false, remoteControlActive: remote.state === 'on', remoteControlState: remote.state })
+    if (e.tool === 'get_status') {
+      if (!pr) return text({ bound: false, message: 'No pull request is bound to this session.', monitor: { auto_archive_on_close: false } })
+      return text({
+        bound: true,
+        pr: { number: 2, url: 'https://github.com/davshn/app/pull/2', repo: 'davshn/app', state: pr.state, base: 'main', head: 'feat/login' },
+        monitor: { auto_fix: pr.autoFix, address_comments: pr.autoFix, auto_merge: false, auto_archive_on_close: false },
+      })
+    }
+    if (e.tool === 'set_monitor') {
+      if (pr) pr.autoFix = e.args.auto_fix === true
+      return text({ ok: true })
+    }
     remote.state = e.args.enabled ? 'on' : 'off'
     return text({ state: remote.state })
   })
@@ -92,6 +106,20 @@ async function knob($: Engine, glyph: string) {
   }
 }
 
+// The Auto-fix switch's word once it reads `word`, or as it is after a
+// while; undefined when there is no switch to press.
+async function fixSwitch($: Engine, word?: string): Promise<string | undefined> {
+  let found: string | undefined
+  for (let i = 0; i < 100; i++) {
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    found = (await ui.find({ type: 'Button', key: 'fix-switch' }))?.text
+    await ui.unmount()
+    if (word === undefined || found === word) return found
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 10))
+  }
+  return found
+}
+
 test('the session section reads the app servers and names what it found', () => {
   expect(parseConnectors(CONNECTORS)).toEqual([
     { name: 'engram', status: 'connected', tools: 19 },
@@ -127,6 +155,71 @@ test('the session section reads the app servers and names what it found', () => 
   expect(switchGlyph({ ...view, remote: 'off' })).toEqual({ knob: '●━━', color: '#8A90A6', word: 'desactivado' })
   expect(switchGlyph({ ...view, remote: 'on' })).toEqual({ knob: '━━●', color: '#22B573', word: 'activado' })
   expect(switchGlyph({ ...view, remote: 'on', isSwitching: true })).toEqual({ knob: '━●━', color: '#F5B400', word: 'cambiando…' })
+})
+
+test("Auto-fix is read from the session's bound pull request: only an open one can be switched", () => {
+  const status = (state: string, autoFix: boolean) => ({ bound: true, pr: { url: 'https://github.com/o/r/pull/2', state }, monitor: { auto_fix: autoFix } })
+  expect(parsePr(status('open', true))).toEqual({ autofix: 'on', prUrl: 'https://github.com/o/r/pull/2' })
+  expect(parsePr(status('open', false))).toEqual({ autofix: 'off', prUrl: 'https://github.com/o/r/pull/2' })
+  expect(parsePr(status('merged', true))).toEqual({ autofix: 'none' })
+  expect(parsePr({ bound: false, monitor: {} })).toEqual({ autofix: 'none' })
+  expect(parsePr('nothing')).toBeUndefined()
+
+  const view = { ...NO_SESSION, isLoaded: true }
+  expect(fixGlyph({ ...view, autofix: 'off' })).toEqual({ knob: '●━━', color: '#8A90A6', word: 'desactivado' })
+  expect(fixGlyph({ ...view, autofix: 'on' })).toEqual({ knob: '━━●', color: '#22B573', word: 'activado' })
+  expect(fixGlyph({ ...view, autofix: 'on', isFixSwitching: true })).toEqual({ knob: '━●━', color: '#F5B400', word: 'cambiando…' })
+  expect(fixGlyph({ ...view, autofix: 'none' })).toEqual({ knob: '●━━', color: '#8A90A6', word: 'sin PR abierto' })
+})
+
+test("the Auto-fix switch, as Remote Control's, turns the PR's CI monitor on through the app, then off again", async ($, on) => {
+  const { calls } = app(on, { state: 'off' }, 0, {}, { state: 'open', autoFix: false })
+  await opened($, on)
+
+  let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: 'Auto-fix' }))).toBeDefined()
+  expect((await ui.find({ type: 'Button', key: 'fix-switch' }))?.text).toBe('desactivado')
+  await ui.press({ key: 'fix-switch' })
+  await ui.unmount()
+  expect(await fixSwitch($, 'activado')).toBe('activado')
+  expect(calls.filter(c => c.tool === 'set_monitor').map(c => [c.server, c.args])).toEqual([
+    ['ccd_pr', { auto_fix: true, address_comments: true, url: 'https://github.com/davshn/app/pull/2' }],
+  ])
+
+  ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Button', key: 'fix-switch' }))?.text).toBe('activado')
+  // Remote Control stays as it was.
+  expect((await ui.find({ type: 'Button', key: 'remote-switch' }))?.text).toBe('desactivado')
+  await ui.press({ key: 'fix-switch' })
+  await ui.unmount()
+  expect(await fixSwitch($, 'desactivado')).toBe('desactivado')
+  expect(calls.filter(c => c.tool === 'set_monitor').map(c => c.args.auto_fix)).toEqual([true, false])
+})
+
+test('with no open pull request, Auto-fix says so and cannot be pressed', async ($, on) => {
+  app(on, { state: 'off' })
+  await opened($, on)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Button', key: 'fix-switch' })).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: 'sin PR abierto' }))?.text).toBe('sin PR abierto')
+  await ui.unmount()
+})
+
+test('a turn that opened or pushed a pull request reads the app again: its PR shows in Auto-fix', async ($, on) => {
+  // A merged PR from before: nothing to switch until the turn opens a new one.
+  const pr = { state: 'merged', autoFix: false }
+  app(on, { state: 'off' }, 0, {}, pr)
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('tool.call', () => ({ result: 'ok' }))
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  await opened($, on)
+  expect(await fixSwitch($)).toBeUndefined()
+
+  pr.state = 'open'
+  await $.turn.start({ text: 'abre el PR', turnId: 't3' })
+  await $.tool.call({ tool: 'Bash', tool_use_id: 'b1', command: 'gh pr create --fill' })
+  await $.turn.complete({ turnId: 't3', reason: 'answer', answer: '', durationMs: 1, isAborted: false })
+  expect(await fixSwitch($, 'desactivado')).toBe('desactivado')
 })
 
 test('the pane opens with the session first: Entorno unfolded, then Conectores folded, above upgrades', async ($, on) => {
@@ -195,8 +288,8 @@ test('the folder picks a new working folder and moves there; the branch opens a 
 
 test("the app's servers are first asked ten seconds after the session starts, once; a failed read is tried again as the first turn starts", async ($, on) => {
   const clock = mock.clock(on)
-  // The first read fails (two calls) before the app's servers answer.
-  const { calls } = app(on, { state: 'off' }, 2)
+  // The first read fails (three calls) before the app's servers answer.
+  const { calls } = app(on, { state: 'off' }, 3)
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await clock.settle()
@@ -206,11 +299,11 @@ test("the app's servers are first asked ten seconds after the session starts, on
   await clock.advance(1_000)
   await clock.settle()
   for (let i = 0; i < 20; i++) await new Promise<void>(resolve => setTimeout(() => resolve(), 5))
-  expect(calls.length).toBe(2)
+  expect(calls.length).toBe(3)
   // No quick retries: the section reads, with no error, until the turn starts.
   await clock.advance(60_000)
   await clock.settle()
-  expect(calls.length).toBe(2)
+  expect(calls.length).toBe(3)
   let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /Leyendo/ }))?.text).toBe('Leyendo la sesión…')
   await ui.unmount()
@@ -247,9 +340,10 @@ test('a server the mod cannot reach says why once the first turn has tried it to
   await clock.settle()
   await $.turn.start({ text: 'hola', turnId: 't0' })
   for (let i = 0; i < 20; i++) await new Promise<void>(resolve => setTimeout(() => resolve(), 5))
-  // Two reads in all, each asking both servers once.
+  // Two reads in all, each asking every server once.
   expect(calls.filter(c => c.tool === 'get_session').length).toBe(2)
   expect(calls.filter(c => c.server === 'ccd_connectors').length).toBe(2)
+  expect(calls.filter(c => c.tool === 'get_status').length).toBe(2)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /control remoto:/ }))?.text).toMatch(/^No pude leer o cambiar el control remoto: .+/)

@@ -40,6 +40,11 @@ import {
   pathOf,
   repositoryLabel,
   switchGlyph,
+  fixGlyph,
+  parsePr,
+  PR_SERVER,
+  PR_TOOL,
+  MONITOR_TOOL,
   webUrlOf,
   REMOTE_TOOL,
   SESSIONS_SERVER,
@@ -923,8 +928,19 @@ async function loadSession($: EngineInterface, isFinal = true, withServers = tru
     where = { remote: 'unknown', remoteError: errorText(err) }
   }
 
-  const isRead = !connectors.connectorsError && !where.remoteError
-  if (isRead || isFinal) await setSession($, view => ({ isLoaded: true, repository, cwd, branch, ...connectors, ...where, isSwitching: view.isSwitching }))
+  let pr: Pick<SessionView, 'autofix' | 'prUrl' | 'fixError'>
+  try {
+    const result = await $.mcp.call(PR_SERVER, PR_TOOL, { session_id: 'self' })
+    const read = result.isError ? undefined : parsePr(result.structuredContent ?? jsonOf(result.content))
+    pr = read ?? { autofix: 'unknown', fixError: textOf(result.content) || 'respuesta sin PR' }
+  } catch (err) {
+    pr = { autofix: 'unknown', fixError: errorText(err) }
+  }
+
+  const isRead = !connectors.connectorsError && !where.remoteError && !pr.fixError
+  if (isRead || isFinal) {
+    await setSession($, view => ({ isLoaded: true, repository, cwd, branch, ...connectors, ...where, ...pr, isSwitching: view.isSwitching, isFixSwitching: view.isFixSwitching }))
+  }
   return isRead
 }
 
@@ -937,9 +953,12 @@ const SESSION_DELAY_MS = 10_000
 let isStartPending = false
 
 // The tools that change what the app's servers report: Remote Control, the
-// worktree, the folder and the connectors. A turn that used none of them
-// leaves the servers' answer as it was.
-const SESSION_TOOLS = /^(mcp__ccd_(session_mgmt|connectors|directory)__|EnterWorktree$|ExitWorktree$)/
+// worktree, the folder, the connectors and the bound pull request. A turn
+// that used none of them leaves the servers' answer as it was. A shell
+// command that opens or pushes a pull request binds it too.
+const SESSION_TOOLS = /^(mcp__ccd_(session_mgmt|connectors|directory|pr)__|EnterWorktree$|ExitWorktree$)/
+const SHELL_TOOLS = /^(Bash|PowerShell)$/
+const PR_COMMANDS = /\b(gh\s+pr\s|git\s+push\b)/
 let isInTurn = false
 let isSessionTouched = false
 
@@ -965,6 +984,26 @@ async function switchRemote($: EngineInterface, enabled: boolean): Promise<void>
   await setSession($, view => ({ ...view, isSwitching: false, ...(remote ? { remote } : {}), remoteError }))
   if (!remoteError) {
     $.ui.toast(enabled ? 'Control remoto activado.' : 'Control remoto desactivado.')
+    await loadSession($)
+  }
+}
+
+// Turns Auto-fix on or off for the session's open pull request, as the
+// app's own CI monitor switch does: the app then wakes the session on CI
+// failures, merge conflicts and review comments. Then reads it back.
+async function switchFix($: EngineInterface, enabled: boolean, url: string): Promise<void> {
+  await setSession($, view => ({ ...view, isFixSwitching: true, fixError: undefined }))
+  let fixError: string | undefined
+  try {
+    // address_comments must equal auto_fix on the app's side.
+    const result = await $.mcp.call(PR_SERVER, MONITOR_TOOL, { auto_fix: enabled, address_comments: enabled, url })
+    if (result.isError) fixError = textOf(result.content) || 'el cambio fue rechazado'
+  } catch (err) {
+    fixError = errorText(err)
+  }
+  await setSession($, view => ({ ...view, isFixSwitching: false, ...(fixError ? {} : { autofix: enabled ? 'on' : 'off' }), fixError }))
+  if (!fixError) {
+    $.ui.toast(enabled ? 'Auto-fix activado.' : 'Auto-fix desactivado.')
     await loadSession($)
   }
 }
@@ -1221,7 +1260,8 @@ export const register: Register = on => {
   })
 
   on('tool.call', async ($, e, next) => {
-    if (isInTurn && SESSION_TOOLS.test(e.tool)) isSessionTouched = true
+    const command = (e as { command?: unknown }).command
+    if (isInTurn && (SESSION_TOOLS.test(e.tool) || (SHELL_TOOLS.test(e.tool) && typeof command === 'string' && PR_COMMANDS.test(command)))) isSessionTouched = true
     return next(e)
   })
 
@@ -1230,7 +1270,7 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       isInTurn = false
       const view = await read($, session)
-      const withServers = isSessionTouched || Boolean(view.remoteError || view.connectorsError)
+      const withServers = isSessionTouched || Boolean(view.remoteError || view.connectorsError || view.fixError)
       isSessionTouched = false
       void loadSession($, true, withServers).catch(() => undefined)
     }
@@ -1377,6 +1417,7 @@ export const register: Register = on => {
     const up = connected(view)
     const down = view.connectors.filter(c => c.status !== 'connected')
     const knob = switchGlyph(view)
+    const fix = fixGlyph(view)
     const sessionSection = (
       <Box flexDirection="column">
         <Box key="panel-session" {...panel(view.isLoaded ? PALETTE.info : PALETTE.muted)}>
@@ -1421,6 +1462,18 @@ export const register: Register = on => {
                   )}
                 </Box>
                 {view.remoteError && <Text color={PALETTE.error}>No pude leer o cambiar el control remoto: {view.remoteError}</Text>}
+                <Box flexDirection="row" gap={1}>
+                  <Text dimColor>Auto-fix</Text>
+                  <Text bold color={fix.color}>
+                    {fix.knob}
+                  </Text>
+                  {!view.isFixSwitching && view.prUrl && (view.autofix === 'on' || view.autofix === 'off') ? (
+                    <Button key="fix-switch" plain label={fix.word} onPress={() => switchFix($, view.autofix === 'off', view.prUrl!)} />
+                  ) : (
+                    <Text dimColor>{fix.word}</Text>
+                  )}
+                </Box>
+                {view.fixError && <Text color={PALETTE.error}>No pude leer o cambiar el Auto-fix: {view.fixError}</Text>}
               </Box>
             )}
           </Box>
