@@ -1,9 +1,10 @@
 // The session section: what the desktop app's session bar shows (the
-// environment, the folder, the branch, the connectors, Remote Control), read
+// environment, the folder, the branch, the connectors, Remote Control,
+// Auto-fix), read
 // from the app's own MCP servers. Pure: the hooks module calls the servers
 // and draws it.
 
-import type { Connector, Remote, SessionView } from '../types'
+import type { Autofix, Connector, Remote, SessionView } from '../types'
 import { PALETTE } from './words'
 
 // The desktop app's servers and the tools the section calls on them.
@@ -12,6 +13,10 @@ export const CONNECTORS_TOOL = 'session_connectors_status'
 export const SESSIONS_SERVER = 'ccd_session_mgmt'
 export const SESSION_TOOL = 'get_session'
 export const REMOTE_TOOL = 'set_remote_control'
+// The pull request bound to the session and its CI monitor (Auto-fix).
+export const PR_SERVER = 'ccd_pr'
+export const PR_TOOL = 'get_status'
+export const MONITOR_TOOL = 'set_monitor'
 // Picking a folder (the native picker) and moving the session there.
 export const DIRECTORY_SERVER = 'ccd_directory'
 export const PICK_TOOL = 'request_directory'
@@ -28,9 +33,21 @@ export const NO_SESSION: SessionView = {
   connectors: [],
   remote: 'unknown',
   isSwitching: false,
+  autofix: 'unknown',
+  isFixSwitching: false,
 }
 
 const REMOTES: readonly Remote[] = ['on', 'off', 'connecting', 'unavailable']
+
+// Whether Auto-fix watches the session's pull request, from ccd_pr's
+// get_status: only an open one can be watched, and switching needs its url.
+export function parsePr(value: unknown): { autofix: Autofix; prUrl?: string } | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const v = value as { bound?: unknown; pr?: { url?: unknown; state?: unknown }; monitor?: { auto_fix?: unknown } }
+  const url = v.pr?.url
+  if (v.bound !== true || v.pr?.state !== 'open' || typeof url !== 'string') return { autofix: 'none' }
+  return { autofix: v.monitor?.auto_fix === true ? 'on' : 'off', prUrl: url }
+}
 
 type Block = { type: string; text?: string }
 
@@ -113,13 +130,23 @@ export function repositoryLabel(url: string): string {
   return url.replace(/^https?:\/\//, '')
 }
 
-// The Remote Control switch, drawn: the knob left and gray when off, right
-// and green when on; yellow while it changes or connects.
-export function switchGlyph(view: SessionView): { knob: string; color: string; word: string } {
-  if (view.isSwitching) return { knob: '━●━', color: PALETTE.waiting, word: 'cambiando…' }
-  if (view.remote === 'on') return { knob: '━━●', color: PALETTE.done, word: REMOTE_WORD.on }
-  if (view.remote === 'connecting') return { knob: '━●━', color: PALETTE.waiting, word: REMOTE_WORD.connecting }
-  return { knob: '●━━', color: PALETTE.muted, word: REMOTE_WORD[view.remote] }
+type Glyph = { knob: string; color: string; word: string }
+
+// A switch, drawn: the knob left and gray when off, right and green when
+// on; yellow while it changes or connects.
+function glyph(state: string, isSwitching: boolean, words: Record<string, string>): Glyph {
+  if (isSwitching) return { knob: '━●━', color: PALETTE.waiting, word: 'cambiando…' }
+  if (state === 'on') return { knob: '━━●', color: PALETTE.done, word: words.on }
+  if (state === 'connecting') return { knob: '━●━', color: PALETTE.waiting, word: words.connecting }
+  return { knob: '●━━', color: PALETTE.muted, word: words[state] }
+}
+
+export function switchGlyph(view: SessionView): Glyph {
+  return glyph(view.remote, view.isSwitching, REMOTE_WORD)
+}
+
+export function fixGlyph(view: SessionView): Glyph {
+  return glyph(view.autofix, view.isFixSwitching, FIX_WORD)
 }
 
 // The folder a directory tool answered with: a `path` field, else the first
@@ -153,6 +180,13 @@ export const REMOTE_WORD: Record<Remote, string> = {
   off: 'desactivado',
   connecting: 'conectando…',
   unavailable: 'no disponible',
+  unknown: 'sin leer',
+}
+
+export const FIX_WORD: Record<Autofix, string> = {
+  on: 'activado',
+  off: 'desactivado',
+  none: 'sin PR abierto',
   unknown: 'sin leer',
 }
 

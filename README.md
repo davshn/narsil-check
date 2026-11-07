@@ -5,7 +5,7 @@
   <img src="https://raw.githubusercontent.com/davshn/narsil-pet/main/assets/readme/searching-oscuro.svg" width="150" alt="Narsil revisando el proyecto (modo oscuro)">
 </p>
 
-Narsil Check es el compañero de [Narsil](https://github.com/davshn/narsil-pet): un panel lateral, con sus mismos colores, que revisa el proyecto en el que trabajas. Muestra el entorno de la sesión (repositorio, carpeta, rama, conectores y control remoto), qué librerías se pueden actualizar y cuánto cuesta hacerlo, qué vulnerabilidades conocidas tienen los paquetes instalados y una lista de tareas pendientes del proyecto. Con él puedes ocultar la barra de sesión de la app de escritorio y quedarte con un solo panel.
+Narsil Check es el compañero de [Narsil](https://github.com/davshn/narsil-pet): un panel lateral, con sus mismos colores, que revisa el proyecto en el que trabajas. Muestra el entorno de la sesión (repositorio, carpeta, rama, conectores, control remoto y Auto-fix), qué librerías se pueden actualizar y cuánto cuesta hacerlo, qué vulnerabilidades conocidas tienen los paquetes instalados y una lista de tareas pendientes del proyecto. Con él puedes ocultar la barra de sesión de la app de escritorio y quedarte con un solo panel.
 
 Lee proyectos de JavaScript y TypeScript (npm y Expo), Python (PyPI), Go, Rust (Cargo), Dart o Flutter (Pub), Kotlin y Java (Gradle y Maven), C# (NuGet), Ruby (RubyGems) y Swift (SwiftPM).
 
@@ -41,11 +41,12 @@ Lo que enseña la barra de sesión de la app de escritorio, para que puedas ocul
 | **Carpeta** | La carpeta de trabajo de la sesión. | Abre el selector de carpetas y mueve la sesión a la que elijas. |
 | **Rama** | La rama de git actual. | Abre una pestaña de terminal en la carpeta de trabajo. |
 | **Control remoto** | Un interruptor: `●━━ desactivado` en gris, `━━● activado` en verde. | Lo activa o lo desactiva. |
+| **Auto-fix** | Un interruptor igual para el PR abierto de la sesión: con él activado, la app despierta a Claude cuando falla el CI, hay un conflicto o llega un comentario de revisión. Sin PR abierto dice `sin PR abierto`. | Lo activa o lo desactiva; la app puede pedirte permiso antes. |
 
 ### Conectores
 Los servidores MCP de la sesión: primero los conectados, con cuántas herramientas tiene cada uno (`engram · 19 herramientas`), y después los demás con su estado (`Gmail · needs_auth`).
 
-Entorno, Conectores y el control remoto se leen de los servidores MCP propios de la app de escritorio. Al empezar la sesión el panel muestra «Leyendo la sesión…» y les pregunta una sola vez, a los diez segundos. Si la app recibe una llamada antes de confirmar qué servidor ofrece la herramienta, pide permiso aunque estés en modo de omitir permisos. Si esa lectura falla, se repite al empezar tu primer turno, sin reintentos rápidos. Al terminar cada turno vuelve a leer la carpeta y la rama con git, así que una rama que cambió durante el turno aparece sin hacer nada. A los servidores de la app solo les pregunta otra vez si el turno usó una herramienta que cambia su respuesta (control remoto, worktree, carpeta o conectores) o si la lectura anterior falló. Al abrir cada desplegable lo lee todo de nuevo. Cada pregunta a esos servidores les llega a los demás mods como una llamada a herramienta, por eso se hacen pocas.
+Entorno, Conectores y el control remoto se leen de los servidores MCP propios de la app de escritorio. Al empezar la sesión el panel muestra «Leyendo la sesión…» y les pregunta una sola vez, a los diez segundos. Si la app recibe una llamada antes de confirmar qué servidor ofrece la herramienta, pide permiso aunque estés en modo de omitir permisos. Si esa lectura falla, se repite al empezar tu primer turno, sin reintentos rápidos. Al terminar cada turno vuelve a leer la carpeta y la rama con git, así que una rama que cambió durante el turno aparece sin hacer nada. A los servidores de la app solo les pregunta otra vez si el turno usó una herramienta que cambia su respuesta (control remoto, worktree, carpeta, conectores o el PR de la sesión, también un `gh pr` o un `git push` en la terminal) o si la lectura anterior falló. Al abrir cada desplegable lo lee todo de nuevo. Cada pregunta a esos servidores les llega a los demás mods como una llamada a herramienta, por eso se hacen pocas.
 
 ### Actualizaciones
 Las librerías desactualizadas, en cuatro grupos:
@@ -253,7 +254,7 @@ Actualizaciones y Vulnerabilidades funcionan dondequiera que Claude Code dibuje 
 | --- | --- | --- |
 | Actualizaciones y Vulnerabilidades | Sí | Sí |
 | Entorno y Conectores | Sí | No: la sección dice por qué no pudo leerlos |
-| Control remoto | Sí | No |
+| Control remoto y Auto-fix | Sí | No |
 | Clic en la carpeta y en la rama | Sí | No |
 | Pendientes | Sí | Sí; en la app móvil no hay campo para escribir: las tareas se añaden pidiéndoselo a Claude |
 
@@ -271,7 +272,7 @@ claude plugin test .
 
 - `hooks/register.tsx`: los hooks del mod (el panel, sus secciones, los botones y los comandos).
 - `hooks/words.ts`: cómo lo dice el panel (nombres de las secciones, colores, resúmenes, ayuda del comando).
-- `hooks/session.ts`: la sección de la sesión (Entorno, Conectores y el interruptor del control remoto).
+- `hooks/session.ts`: la sección de la sesión (Entorno, Conectores y los interruptores del control remoto y del Auto-fix).
 - `hooks/todos.ts`: Pendientes (el archivo de la lista, el formato `nombre: contenido`, la exclusión de git y la búsqueda de plantillas).
 - `hooks/ecosystems.ts` y `hooks/adapter.ts`: la lista de ecosistemas y lo que cada uno tiene que saber hacer.
 - `hooks/npm.ts`, `pypi.ts`, `golang.ts`, `cargo.ts`, `pub.ts`, `maven.ts`, `nuget.ts`, `rubygems.ts` y `swiftpm.ts`: cada ecosistema (leer el manifest, preguntar al registro y reescribir la versión).
