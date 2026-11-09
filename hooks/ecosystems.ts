@@ -11,6 +11,8 @@ import { PUB } from './pub'
 import { RUBYGEMS } from './rubygems'
 import { SWIFTPM } from './swiftpm'
 import { PYPI } from './pypi'
+import { ACTIONS } from './actions'
+import { GRADLE_WRAPPER } from './wrapper'
 import { LOCKFILES, MANIFEST, installArgv, latestOf, latestUrl, managerOf, parseManifest, lockedVersion } from './npm'
 
 export const NPM: Adapter = {
@@ -58,7 +60,7 @@ export const NPM: Adapter = {
   },
 }
 
-export const ADAPTERS: Adapter[] = [NPM, PYPI, GO, CARGO, PUB, MAVEN, NUGET, RUBYGEMS, SWIFTPM]
+export const ADAPTERS: Adapter[] = [NPM, PYPI, GO, CARGO, PUB, MAVEN, GRADLE_WRAPPER, NUGET, RUBYGEMS, SWIFTPM, ACTIONS]
 
 export function adapterOf(id: Ecosystem): Adapter {
   return ADAPTERS.find(a => a.id === id) ?? NPM
