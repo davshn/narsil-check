@@ -156,8 +156,14 @@ test('raising minimums inside each package declaration leaves every other byte a
   expect(rewriteSwift(PBXPROJ, ups)).toBe(PBXPROJ.replace('minimumVersion = 7.10.0;', 'minimumVersion = 7.12.0;'))
 })
 
-function swiftPackage(on: On, tags: Record<string, string[]>) {
-  const files: Record<string, string> = { 'Package.swift': PACKAGE_SWIFT, 'Package.resolved': RESOLVED_V2 }
+// `start` replaces the project's files, `tracked` is what git lists for the
+// Xcode globs, `missing` the tools that cannot start, as on a machine without
+// them, `hung` the ones that outlast their timeout, and `crates` what
+// crates.io answers as each crate's latest.
+type Setup = { start?: Record<string, string>; tracked?: string; missing?: string[]; hung?: string[]; crates?: Record<string, string> }
+
+function swiftPackage(on: On, tags: Record<string, string[]>, setup: Setup = {}) {
+  const files: Record<string, string> = setup.start ?? { 'Package.swift': PACKAGE_SWIFT, 'Package.resolved': RESOLVED_V2 }
   const store = new Map<string, unknown>()
   const keyOf = (path: string) => {
     const at = path.replace(/\\/g, '/')
@@ -182,14 +188,22 @@ function swiftPackage(on: On, tags: Record<string, string[]>) {
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.toast', () => ({ value: undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('http.fetch', (_, e) => released(e.url) ?? { value: { status: 404, ok: false, headers: {}, text: '' } })
+  on('http.fetch', (_, e) => {
+    const date = released(e.url)
+    if (date) return date
+    const crate = setup.crates?.[e.url.replace('https://crates.io/api/v1/crates/', '')]
+    return { value: crate ? { status: 200, ok: true, headers: {}, text: JSON.stringify({ crate: { max_stable_version: crate } }) } : { status: 404, ok: false, headers: {}, text: '' } }
+  })
   const ran: string[][] = []
   on('process.run', (_, e) => {
     ran.push([...e.argv])
+    // A hook's deny rejects $.process.run, as the engine does for these two.
+    if (setup.missing?.some(tool => e.argv[0] === tool || e.argv[0] === `${tool}.cmd`)) return { deny: `$.process.run(${e.argv[0]}) failed to start: ENOENT: Command '${e.argv[0]}' not found` }
+    if (setup.hung?.some(tool => e.argv[0] === tool || e.argv[0] === `${tool}.cmd`)) return { deny: 'timed out' }
     const done = (stdout: string, exitCode = 0) => ({ value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
     // git ls-remote answers each package's tags; no other git repository.
     if (e.argv[1] === 'ls-remote') return done((tags[e.argv[4] as string] ?? []).map((t, i) => `${i}\trefs/tags/${t}`).join('\n'))
-    if (e.argv[1] === 'ls-files') return done('')
+    if (e.argv[1] === 'ls-files') return done(setup.tracked && e.argv.some(arg => arg.includes('pbxproj')) ? setup.tracked : '')
     return done('', e.argv[0] === 'git' ? 1 : 0)
   })
   return { files, ran }
@@ -218,17 +232,91 @@ test('a Swift package reads tags with git ls-remote and the button raises Packag
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await scanned($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('4 para actualizar de 6 · 1 mayores · 3 triviales')
+  expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('4 para actualizar de 6 · 1 bloqueadas · 1 mayores · 2 triviales')
   expect((await ui.find({ type: 'Button', text: /^swift-argument-parser/ }))?.text).toBe('swift-argument-parser 1.3.0 → 1.8.2')
-  // An exact pin with a newer release is still listed: raising it is the upgrade.
+  // An exact pin with a newer release is still listed, for the person to decide.
   expect((await ui.find({ type: 'Button', text: /^Alamofire/ }))?.text).toBe('Alamofire 5.8.1 → 5.12.2')
   expect(ran.filter(argv => argv[1] === 'ls-remote').length).toBe(6)
 
   await ui.press({ key: 'upgrade-bumps' })
-  expect(ran.filter(argv => argv[0] === 'swift')).toEqual([['swift', 'package', 'update', 'alamofire', 'swift-argument-parser', 'swift-nio']])
+  expect(ran.filter(argv => argv[0] === 'swift')).toEqual([['swift', 'package', 'update', 'swift-argument-parser', 'swift-nio']])
   expect(files['Package.swift']).toContain('swift-nio.git", from: "2.105.0"')
-  expect(files['Package.swift']).toContain('exact: "5.12.2"')
+  expect(files['Package.swift']).toContain('exact: "5.8.1"')
   // The major is left for the person.
   expect(files['Package.swift']).toContain('"1.0.0"..<"2.0.0"')
+  await ui.unmount()
+})
+
+test('an Xcode package pinned with exactVersion is blocked with the reason, not trivial', async ($, on) => {
+  const pinned = PBXPROJ.replace('kind = upToNextMajorVersion', 'kind = exactVersion').replace('minimumVersion = 7.10.0', 'version = 7.10.0')
+  const { files, ran } = swiftPackage(on, { 'https://github.com/onevcat/Kingfisher': ['7.10.0', '7.12.0'] }, {
+    start: { 'App.xcodeproj/project.pbxproj': pinned },
+    tracked: 'App.xcodeproj/project.pbxproj',
+  })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('1 para actualizar de 1 · 1 bloqueadas')
+  expect((await ui.find({ type: 'Text', text: /versión exacta/ }))?.text).toContain('Fijada a la versión exacta 7.10.0: revisa por qué antes de subirla')
+  expect(await ui.find({ type: 'Button', text: /^Actualizar (esta|las)/ })).toBeUndefined()
+  expect(files['App.xcodeproj/project.pbxproj']).toBe(pinned)
+  expect(ran.filter(argv => argv[0] === 'xcodebuild')).toEqual([])
+  await ui.unmount()
+})
+
+test('an Xcode project on a machine without xcodebuild keeps its files as they were and says why', async ($, on) => {
+  const { files, ran } = swiftPackage(on, { 'https://github.com/onevcat/Kingfisher': ['7.10.0', '7.12.0'] }, {
+    start: { 'App.xcodeproj/project.pbxproj': PBXPROJ },
+    tracked: 'App.xcodeproj/project.pbxproj',
+    missing: ['xcodebuild'],
+  })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'upgrade-bumps' })
+
+  expect(ran.filter(argv => argv[0] === 'xcodebuild')).toEqual([['xcodebuild', '-resolvePackageDependencies']])
+  expect(files['App.xcodeproj/project.pbxproj']).toBe(PBXPROJ)
+  expect((await ui.find({ type: 'Text', text: /sin actualizar/ }))?.text).toBe('SwiftPM quedó sin actualizar (1 librería): no pude ejecutar xcodebuild en este equipo y dejé sus archivos como estaban.')
+  expect((await ui.find({ type: 'Button', text: /^Kingfisher/ }))?.text).toBe('Kingfisher 7.10.0 → 7.12.0')
+  await ui.unmount()
+})
+
+test('a tool that outlasts its timeout is a failure, not a tool missing from the machine', async ($, on) => {
+  swiftPackage(on, { 'https://github.com/apple/swift-nio': ['2.101.3', '2.105.0'] }, { hung: ['swift'] })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'upgrade-bumps' })
+
+  expect((await ui.find({ type: 'Text', text: /^No pude ejecutar/ }))?.text).toBe('No pude ejecutar swift: narsil-check: $.process.run: timed out')
+  expect(await ui.find({ type: 'Text', text: /sin actualizar/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('an ecosystem whose tool cannot start stays as it was and the others still go up', async ($, on) => {
+  const cargo = '[package]\nname = "a"\nversion = "0.1.0"\n\n[dependencies]\nserde = "1.0.200"\n'
+  const { files, ran } = swiftPackage(on, {
+    'https://github.com/apple/swift-nio': ['2.101.3', '2.105.0'],
+    'https://github.com/apple/swift-argument-parser': ['1.3.0', 'v1.8.2'],
+    'https://github.com/Alamofire/Alamofire': ['5.8.1', '5.12.2'],
+  }, {
+    start: { 'Cargo.toml': cargo, 'Package.swift': PACKAGE_SWIFT, 'Package.resolved': RESOLVED_V2 },
+    missing: ['cargo'],
+    crates: { serde: '1.0.229' },
+  })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'upgrade-bumps' })
+
+  expect(files['Cargo.toml']).toBe(cargo)
+  expect(ran.filter(argv => argv[0] === 'swift')).toEqual([['swift', 'package', 'update', 'swift-argument-parser', 'swift-nio']])
+  expect(files['Package.swift']).toContain('swift-nio.git", from: "2.105.0"')
+  expect((await ui.find({ type: 'Text', text: /sin actualizar/ }))?.text).toBe('Actualicé 2 librerías. Cargo quedó sin actualizar (1 librería): no pude ejecutar cargo en este equipo y dejé sus archivos como estaban.')
   await ui.unmount()
 })

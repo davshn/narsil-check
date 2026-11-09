@@ -15,6 +15,8 @@ import type { TomlTable, TomlValue } from './toml'
 export const CATALOG = 'gradle/libs.versions.toml'
 const GRADLE_GLOBS = ['**/build.gradle.kts', '**/build.gradle']
 const POM_GLOB = '**/pom.xml'
+// gradle.lockfile, and the buildscript- and settings- ones beside it.
+const LOCK_GLOB = '**/*gradle.lockfile'
 
 // A plugin id's marker artifact: how a Gradle plugin is published.
 export function pluginCoordinate(id: string): string {
@@ -286,6 +288,39 @@ export function kotlinConflicts(u: Upgrade, deps: Dep[], files: Files): string[]
   return conflicts
 }
 
+// The coordinates one row raises: every library and plugin of a shared
+// version.ref, since each is locked on its own.
+function coordinatesOf(u: Upgrade, files: Files): string[] {
+  if (!u.source?.startsWith('catalog:versions.')) return [u.name]
+  const ref = u.source.slice('catalog:versions.'.length)
+  try {
+    return catalogEntries(parseToml(files[CATALOG] ?? '')).filter(e => e.ref === ref).map(e => e.coordinate)
+  } catch {
+    return [u.name]
+  }
+}
+
+// A locked build refuses a version its lockfile does not hold, so going up
+// takes regenerating the lock, which only the project's own task knows how.
+export function lockConflicts(u: Upgrade, files: Files): string[] {
+  const names = new Set(coordinatesOf(u, files))
+  const lock = globRegex(LOCK_GLOB)
+  const stale: { path: string; version: string }[] = []
+  for (const [path, text] of Object.entries(files)) {
+    if (!lock.test(path)) continue
+    for (const line of text.split(/\r?\n/)) {
+      const held = /^([^:\s#]+:[^:\s]+):([^=\s]+)=/.exec(line)
+      if (!held || !names.has(held[1] as string) || held[2] === u.latest) continue
+      stale.push({ path, version: held[2] as string })
+      break
+    }
+  }
+  const first = stale[0]
+  if (!first) return []
+  const more = stale.length > 1 ? ` y ${stale.length - 1} más` : ''
+  return [`${first.path}${more} la fija en ${first.version}: al subirla hay que regenerar el lock con --write-locks`]
+}
+
 export const MAVEN: Adapter = {
   id: 'maven',
   label: 'Maven',
@@ -294,6 +329,7 @@ export const MAVEN: Adapter = {
   lockfiles: [],
   // The wrapper's Gradle version, for what AGP and Kotlin need.
   contextFiles: WRAPPERS,
+  contextGlobs: [LOCK_GLOB],
   parse: parseMaven,
   latestUrl: metadataUrl,
   // A Gradle plugin's own artifact (org.jlleitschuh.gradle:ktlint-gradle) is
@@ -324,7 +360,7 @@ export const MAVEN: Adapter = {
     const at = Date.parse(headers['last-modified'] ?? '')
     return Number.isNaN(at) ? undefined : new Date(at).toISOString()
   },
-  conflictsOf: (u, deps, files) => [...kotlinConflicts(u, deps, files), ...kmpConflicts(u, deps, files)],
+  conflictsOf: (u, deps, files) => [...kotlinConflicts(u, deps, files), ...kmpConflicts(u, deps, files), ...lockConflicts(u, files)],
   repoUrlOf: pom => {
     const scm = /<scm>[\s\S]*?<url>\s*([^<\s]+)\s*<\/url>/.exec(pom)?.[1]
     const url = scm ?? /<url>\s*([^<\s]*github\.com[^<\s]*)\s*<\/url>/.exec(pom)?.[1]

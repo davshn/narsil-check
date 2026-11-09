@@ -191,8 +191,9 @@ test('raising versions where each is written leaves every other byte as it was',
   expect(out['pom.xml']).toBe(POM.replace('<spring.version>6.1.5</spring.version>', '<spring.version>6.1.14</spring.version>').replace('<version>5.10.2</version>', '<version>5.11.4</version>'))
 })
 
-function gradleProject(on: On, metadata: Record<string, string[]>) {
-  const files: Record<string, string> = { 'gradle/libs.versions.toml': CATALOG, 'app/build.gradle.kts': BUILD }
+// `extra` are more files of the tree, git listing them too.
+function gradleProject(on: On, metadata: Record<string, string[]>, extra: Record<string, string> = {}) {
+  const files: Record<string, string> = { 'gradle/libs.versions.toml': CATALOG, 'app/build.gradle.kts': BUILD, ...extra }
   const store = new Map<string, unknown>()
   const keyOf = (path: string) => {
     const at = path.replace(/\\/g, '/')
@@ -233,7 +234,7 @@ function gradleProject(on: On, metadata: Record<string, string[]>) {
   on('process.run', (_, e) => {
     ran.push([...e.argv])
     const ls = e.argv[1] === 'ls-files'
-    return { value: { exitCode: ls ? 0 : e.argv[0] === 'git' ? 1 : 0, stdout: ls ? 'app/build.gradle.kts\n' : '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    return { value: { exitCode: ls ? 0 : e.argv[0] === 'git' ? 1 : 0, stdout: ls ? ['app/build.gradle.kts', ...Object.keys(extra), ''].join('\n') : '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   return { files, ran }
 }
@@ -270,4 +271,36 @@ test('a Gradle project shows a shared version as one row and the button raises t
   expect(files['app/build.gradle.kts']).toContain('com.squareup.retrofit2:retrofit:2.11.0')
   expect(ran.filter(argv => argv[0] !== 'git')).toEqual([])
   await ui.unmount()
+})
+
+test('a version a gradle.lockfile holds, for any library sharing it, is blocked and the button leaves it out', async ($, on) => {
+  const central = 'https://repo1.maven.org/maven2'
+  const lock = '# This is a Gradle generated file for dependency locking.\nio.ktor:ktor-client-auth:3.6.1=releaseRuntimeClasspath\nempty=\n'
+  const { files } = gradleProject(on, {
+    [`${central}/io/ktor/ktor-client-core/maven-metadata.xml`]: ['3.6.1', '3.7.0'],
+    [`${central}/io/mockk/mockk/maven-metadata.xml`]: ['1.13.10', '1.13.17'],
+  }, { 'app/gradle.lockfile': lock })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /para actualizar/ }))?.text).toBe('2 para actualizar de 11 · 1 bloqueadas · 1 triviales')
+  expect((await ui.find({ type: 'Text', text: /gradle\.lockfile/ }))?.text).toContain('app/gradle.lockfile la fija en 3.6.1: al subirla hay que regenerar el lock con --write-locks')
+
+  await ui.press({ key: 'upgrade-bumps' })
+  expect(files['gradle/libs.versions.toml']).toContain('ktor = "3.6.1"')
+  expect(files['app/gradle.lockfile']).toBe(lock)
+  // What no lockfile holds still goes up.
+  expect(files['app/build.gradle.kts']).toContain('io.mockk:mockk:1.13.17')
+  await ui.unmount()
+})
+
+test('a lockfile that already holds the new version, or several that hold the old one, read as they are', () => {
+  const up = { name: 'io.ktor:ktor-client-core', ecosystem: 'maven', spec: '3.6.1', current: '3.6.1', latest: '3.7.0', bump: 'minor', isDev: false, group: 'bump', conflicts: [] as string[], source: 'catalog:versions.ktor' } as const
+  const deps = parseCatalog(CATALOG)
+  const line = (version: string) => `io.ktor:ktor-client-core:${version}=runtimeClasspath\n`
+  expect(MAVEN.conflictsOf?.(up, deps, { 'gradle/libs.versions.toml': CATALOG, 'app/gradle.lockfile': line('3.7.0') })).toEqual([])
+  expect(MAVEN.conflictsOf?.(up, deps, { 'gradle/libs.versions.toml': CATALOG, 'a/gradle.lockfile': line('3.6.1'), 'b/buildscript-gradle.lockfile': line('3.6.1') })).toEqual([
+    'a/gradle.lockfile y 1 más la fija en 3.6.1: al subirla hay que regenerar el lock con --write-locks',
+  ])
 })

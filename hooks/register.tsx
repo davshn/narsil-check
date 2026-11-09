@@ -63,7 +63,8 @@ import {
 import type { CiRun, CiView, Remote, SessionView, Task, Todos } from '../types'
 import { CI_POLL_MS, CI_WAIT_POLLS, ciLabel, ciMark, isGoing, jobsOf, latestRuns, markOf, runListArgv, runViewArgv } from './ci'
 import { TODO_FILE, TOOL_ADD, TOOL_DONE, TOOL_LIST, TOOL_TEMPLATE, damagedPath, findTask, newTask, parseEntry, parseTodoFile, serializeTodos, templateArg, templateMatches, templatePrompt, todosColor, todosLabel, todosText, withExclude } from './todos'
-import { COMMAND, COMMAND_HELP, GROUPS, HEALTH_SIZE, NARSIL_SIZE, PALETTE, PANE, TITLE, agoLabel, auditSummary, commandHelp, groupLabel, healthOf, healthSvg, narsilSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, sortUpgrades, summaryOf, tail } from './words'
+import { COMMAND, COMMAND_HELP, GROUPS, HEALTH_SIZE, NARSIL_SIZE, PALETTE, PANE, TITLE, agoLabel, auditSummary, commandHelp, groupLabel, healthOf, healthSvg, narsilSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, skippedNote, sortUpgrades, summaryOf, tail } from './words'
+import type { SkippedEcosystem } from './words'
 import { PARADA_CLARO, PARADA_OSCURO } from './narsil-art'
 
 // Change a tag when its type's fields change: it declines what an earlier
@@ -166,9 +167,10 @@ async function presentOf($: EngineInterface, adapter: Adapter): Promise<string[]
   for (const file of [...adapter.manifests, ...adapter.lockfiles, ...(adapter.contextFiles ?? [])]) if (await $.fs.exists(file)) present.push(file)
   // Manifests anywhere in the tree: the files git tracks or would track
   // (untracked, not ignored), so build output is left out.
-  if (adapter.globs) {
+  const globs = [...(adapter.globs ?? []), ...(adapter.contextGlobs ?? [])]
+  if (globs.length > 0) {
     try {
-      const listed = await $.process.run(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '--', ...adapter.globs.map(g => `:(glob)${g}`)], { timeoutMs: GIT_MS })
+      const listed = await $.process.run(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '--', ...globs.map(g => `:(glob)${g}`)], { timeoutMs: GIT_MS })
       if (listed.exitCode === 0) {
         for (const path of listed.stdout.split(/\r?\n/).map(l => l.trim())) if (path && !present.includes(path)) present.push(path)
       }
@@ -859,10 +861,12 @@ async function upgradeBumps($: EngineInterface): Promise<void> {
   }
   const manager = plans.map(p => p.adapter.managerOf(p.present)).join(', ')
   await setJob($, { status: 'running', manager, count: bumps.length })
+  const skipped: SkippedEcosystem[] = []
   try {
     for (const { adapter, present, upgrades } of plans) {
       const files = await readFiles($, present)
-      if (adapter.rewrite) for (const [path, text] of Object.entries(adapter.rewrite(files, upgrades))) await $.fs.write(path, text)
+      const rewritten = adapter.rewrite?.(files, upgrades) ?? {}
+      for (const [path, text] of Object.entries(rewritten)) await $.fs.write(path, text)
       // pnpm and npm install under the wait through the whole tree: pnpm
       // strictly and with no exclusions, npm resolving to versions published
       // before then. A young version anywhere fails the install instead of
@@ -870,7 +874,19 @@ async function upgradeBumps($: EngineInterface): Promise<void> {
       const tool = adapter.id === 'npm' ? adapter.managerOf(present) : ''
       const minutes = tool === 'pnpm' || tool === 'npm' ? Math.max(RELEASE_AGE, await releaseMinutes($)) : 0
       for (const argv of adapter.installArgv(present, upgrades, files)) {
-        const ran = await runCommand($, argv, INSTALL_MS, releaseAgeEnv(tool, minutes))
+        // Only a tool that is not there: a run that outlasts its timeout also
+        // rejects, and that one is still reported as a failure.
+        const ran = await runCommand($, argv, INSTALL_MS, releaseAgeEnv(tool, minutes)).catch((err: unknown) => {
+          if (!errorText(err).includes('ENOENT')) throw err
+          return undefined
+        })
+        // The tool is not on this machine (xcodebuild outside a Mac): raised
+        // manifests would go out with a stale lockfile, so they go back.
+        if (!ran) {
+          for (const path of Object.keys(rewritten)) await $.fs.write(path, files[path] as string)
+          skipped.push({ label: adapter.label, tool: argv[0] as string, count: upgrades.length })
+          break
+        }
         if (ran.exitCode !== 0) {
           const refused = minutes > 0 ? ageRefusal(`${ran.stderr}\n${ran.stdout}`, minutes) : undefined
           await setJob($, { status: 'failed', message: refused ?? `${argv.slice(0, 2).join(' ')} terminó con código ${ran.exitCode}: ${tail(ran.stderr || ran.stdout)}` })
@@ -879,8 +895,12 @@ async function upgradeBumps($: EngineInterface): Promise<void> {
         }
       }
     }
-    await setJob($, { status: 'upgraded', count: bumps.length, at: Date.now() })
-    $.ui.toast(`Actualicé ${bumps.length} ${bumps.length === 1 ? 'librería' : 'librerías'} con ${manager}.`)
+    if (skipped.length > 0) {
+      await setJob($, { status: 'failed', message: skippedNote(bumps.length - skipped.reduce((sum, s) => sum + s.count, 0), skipped) })
+    } else {
+      await setJob($, { status: 'upgraded', count: bumps.length, at: Date.now() })
+      $.ui.toast(`Actualicé ${bumps.length} ${bumps.length === 1 ? 'librería' : 'librerías'} con ${manager}.`)
+    }
   } catch (err) {
     await setJob($, { status: 'failed', message: `No pude ejecutar ${manager}: ${err instanceof Error ? err.message : String(err)}` })
   }
