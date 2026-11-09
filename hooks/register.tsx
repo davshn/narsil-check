@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Audit, Ecosystem, Explained, Finding, Group, Job, Pending, Pr, Pull, Scan, Severity, Upgrade } from '../types'
-import { BATCH_SIZE, OSV_BATCH, OSV_VULN, SEVERITIES, SEVERITY_TITLE, batchBody, batchIds, bySeverity, fixedBy, mergeVulns, vulnCopyText, vulnOf, worstOf } from './osv'
+import { BATCH_SIZE, OSV_BATCH, OSV_ECOSYSTEM, OSV_VULN, SEVERITIES, SEVERITY_TITLE, batchBody, batchIds, bySeverity, fixedBy, mergeVulns, vulnCopyText, vulnOf, worstOf } from './osv'
 import type { Package } from './osv'
 import {
   NOTES_PER_RELEASE,
@@ -23,6 +23,7 @@ import {
 import type { Reason } from './explain'
 import { ADAPTERS, NPM, adapterOf, holdNote, manifestOf, manifestsOf, specChanges } from './ecosystems'
 import type { Adapter, Dep, Files } from './ecosystems'
+import type { Pins } from './adapter'
 import { branchName, commitBody, commitTitle, isMainBranch, prBody, prUrlOf } from './git'
 import { EXPO_TABLE, LOCK, MANIFEST, NPMRC, PNPM_LOCK, WORKSPACE, ageConflict, ageRefusal, expoTableUrl, installedFromManifest, installedOf, latestUrl, lockedPackage, packumentUrl, parseManifest, peerConflicts, pinConflicts, pnpmLocked, RELEASE_AGE, releaseAgeEnv, releaseAgeOf, upgradeOf, versionUrl } from './npm'
 import type { Declared, Found, Installed, LockedPackage } from './npm'
@@ -490,6 +491,7 @@ async function setAudit($: EngineInterface, value: Audit): Promise<Audit> {
 async function auditedPackages($: EngineInterface): Promise<Package[]> {
   const packages: Package[] = []
   for (const { adapter, present } of await detected($)) {
+    if (!OSV_ECOSYSTEM[adapter.id]) continue
     const files = await readFiles($, present)
     const declared = adapter.parse(files)
     const direct = new Map(declared.map(d => [d.name, d]))
@@ -846,6 +848,21 @@ async function publish($: EngineInterface): Promise<void> {
   await checkPending($)
 }
 
+// What each upgrade's rewrite needs a command to say, or the first upgrade it
+// could not be read for: then nothing of that ecosystem is written.
+async function pinsOf($: EngineInterface, adapter: Adapter, upgrades: Upgrade[]): Promise<{ pins: Pins } | { unread: Upgrade }> {
+  const pins: Pins = {}
+  for (const u of upgrades) {
+    const argv = adapter.pinCommand?.(u)
+    if (!argv) continue
+    const ran = await $.process.run(argv, { timeoutMs: GIT_MS }).catch(() => undefined)
+    const pin = ran?.exitCode === 0 ? adapter.pinOf?.(ran.stdout, u) : undefined
+    if (!pin) return { unread: u }
+    pins[u.name] = pin
+  }
+  return { pins }
+}
+
 // Installs every upgrade of the bump group at once, then scans again.
 async function upgradeBumps($: EngineInterface): Promise<void> {
   if ((await read($, job)).status === 'running') return
@@ -865,7 +882,12 @@ async function upgradeBumps($: EngineInterface): Promise<void> {
   try {
     for (const { adapter, present, upgrades } of plans) {
       const files = await readFiles($, present)
-      const rewritten = adapter.rewrite?.(files, upgrades) ?? {}
+      const read = await pinsOf($, adapter, upgrades)
+      if ('unread' in read) {
+        skipped.push({ label: adapter.label, why: `no pude leer el commit de ${read.unread.display ?? read.unread.name} ${read.unread.latest}`, count: upgrades.length })
+        continue
+      }
+      const rewritten = adapter.rewrite?.(files, upgrades, read.pins) ?? {}
       for (const [path, text] of Object.entries(rewritten)) await $.fs.write(path, text)
       // pnpm and npm install under the wait through the whole tree: pnpm
       // strictly and with no exclusions, npm resolving to versions published
@@ -884,7 +906,7 @@ async function upgradeBumps($: EngineInterface): Promise<void> {
         // manifests would go out with a stale lockfile, so they go back.
         if (!ran) {
           for (const path of Object.keys(rewritten)) await $.fs.write(path, files[path] as string)
-          skipped.push({ label: adapter.label, tool: argv[0] as string, count: upgrades.length })
+          skipped.push({ label: adapter.label, why: `no pude ejecutar ${argv[0]} en este equipo`, count: upgrades.length })
           break
         }
         if (ran.exitCode !== 0) {
@@ -1866,7 +1888,7 @@ export const register: Register = on => {
       return frame(
         <Box flexDirection="column">
           <Text>No encontré dependencias que revisar en este proyecto.</Text>
-          <Text dimColor>Reviso npm y Expo (package.json), PyPI (pyproject.toml, requirements.txt), Go (go.mod), Cargo (Cargo.toml), Pub (pubspec.yaml), Gradle y Maven (libs.versions.toml, build.gradle.kts, pom.xml), NuGet (.csproj), RubyGems (Gemfile) y SwiftPM (Package.swift, proyectos de Xcode).</Text>
+          <Text dimColor>Reviso npm y Expo (package.json), PyPI (pyproject.toml, requirements.txt), Go (go.mod), Cargo (Cargo.toml), Pub (pubspec.yaml), Gradle y Maven (libs.versions.toml, build.gradle.kts, pom.xml), el wrapper de Gradle, NuGet (.csproj), RubyGems (Gemfile), SwiftPM (Package.swift, proyectos de Xcode) y GitHub Actions (.github/workflows).</Text>
         </Box>,
       )
     }

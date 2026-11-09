@@ -23,6 +23,9 @@ export const OSV_ECOSYSTEM: Record<Ecosystem, string> = {
   nuget: 'NuGet',
   rubygems: 'RubyGems',
   swiftpm: 'SwiftURL',
+  actions: 'GitHub Actions',
+  // OSV has no such ecosystem, and one unknown name fails the whole batch.
+  'gradle-wrapper': '',
 }
 
 // A package's name as OSV knows it: a Swift package is its URL with no

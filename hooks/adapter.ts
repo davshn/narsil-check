@@ -17,6 +17,9 @@ export type Dep = { name: string; spec: string; isDev: boolean; installed?: stri
 // lockfiles exist.
 export type Files = Record<string, string>
 
+// What each upgrade's `pinCommand` named, by the upgrade's name.
+export type Pins = Record<string, string>
+
 export type Adapter = {
   id: Ecosystem
   // How the pane names it: "npm", "PyPI", "Go", "Cargo", "Pub".
@@ -54,7 +57,12 @@ export type Adapter = {
   // The install commands that take the bump group up, given which of its
   // files exist; with `rewrite` instead, the files the hooks write.
   installArgv: (present: string[], upgrades: Upgrade[], files: Files) => string[][]
-  rewrite?: (files: Files, upgrades: Upgrade[]) => Files
+  rewrite?: (files: Files, upgrades: Upgrade[], pins: Pins) => Files
+  // For a rewrite that needs what only a command can say (the commit of a
+  // new tag, for an action pinned to a commit): the command for an upgrade,
+  // and what its output names. Read before any file is written.
+  pinCommand?: (upgrade: Upgrade) => string[]
+  pinOf?: (stdout: string, upgrade: Upgrade) => string | undefined
   // What the button's note names as the tool: "npm", "uv", "cargo"...
   managerOf: (present: string[]) => string
   // An extended regex (git grep -E) for the project's imports of `name`.

@@ -159,13 +159,13 @@ export function jobNote(job: Job): { text: string; color: string } | undefined {
   }
 }
 
-export type SkippedEcosystem = { label: string; tool: string; count: number }
+export type SkippedEcosystem = { label: string; why: string; count: number }
 
-// What an upgrade says when an ecosystem's tool could not start: what did go
-// up, and which ecosystems stayed as they were.
+// What an upgrade says when an ecosystem could not go up: what did, and which
+// ecosystems stayed as they were and why.
 export function skippedNote(upgraded: number, skipped: SkippedEcosystem[]): string {
   const libraries = (count: number) => `${count} ${count === 1 ? 'librería' : 'librerías'}`
-  const stayed = skipped.map(s => `${s.label} quedó sin actualizar (${libraries(s.count)}): no pude ejecutar ${s.tool} en este equipo y dejé sus archivos como estaban.`)
+  const stayed = skipped.map(s => `${s.label} quedó sin actualizar (${libraries(s.count)}): ${s.why} y dejé sus archivos como estaban.`)
   return [...(upgraded > 0 ? [`Actualicé ${libraries(upgraded)}.`] : []), ...stayed].join(' ')
 }
 
