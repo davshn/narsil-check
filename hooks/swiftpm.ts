@@ -64,7 +64,7 @@ export function parsePackageSwift(text: string, path: string): Dep[] {
     const url = /\burl\s*:\s*"([^"]+)"/.exec(call)?.[1]
     const minimum = minimumOf(call)
     if (!url || !minimum) continue
-    deps.push({ name: canonicalUrl(url), spec: minimum, isDev: false, display: packageName(url), source: `file:${path}` })
+    deps.push({ name: canonicalUrl(url), spec: minimum, isDev: false, display: packageName(url), source: `file:${path}`, ...(/\bexact\s*:|\.exact\s*\(/.test(call) ? { isExact: true } : {}) })
   }
   return deps
 }
@@ -78,7 +78,7 @@ export function parsePbxproj(text: string, path: string): Dep[] {
     const requirement = m[2] as string
     if (/kind\s*=\s*(branch|revision)\b/.test(requirement)) continue
     const minimum = /(?:minimumVersion|version)\s*=\s*"?([0-9][^";]*)"?;/.exec(requirement)?.[1]
-    if (minimum) deps.push({ name: canonicalUrl(url), spec: minimum, isDev: false, display: packageName(url), source: `file:${path}` })
+    if (minimum) deps.push({ name: canonicalUrl(url), spec: minimum, isDev: false, display: packageName(url), source: `file:${path}`, ...(/kind\s*=\s*exactVersion\b/.test(requirement) ? { isExact: true } : {}) })
   }
   return deps
 }
@@ -196,6 +196,8 @@ export const SWIFTPM: Adapter = {
       ? [['swift', 'package', 'update', ...upgrades.map(u => packageName(u.name).toLowerCase())]]
       : [['xcodebuild', '-resolvePackageDependencies']],
   managerOf: present => (present.includes(MANIFEST) ? 'swift' : 'xcode'),
+  // Where a range is the norm, one exact version is a decision someone made.
+  conflictsOf: (u, deps) => (deps.find(d => d.name === u.name)?.isExact ? [`Fijada a la versión exacta ${u.spec}: revisa por qué antes de subirla`] : []),
   // Every package Package.resolved pins, wherever it is.
   treeOf: files => {
     const pins = new Map<string, string>()

@@ -9,7 +9,9 @@ import type { Ecosystem, Upgrade } from '../types'
 // a lockfile records it. `display` is how the pane names it when that is not
 // the name (a version catalog's shared "ktor" for eight libraries), and
 // `source` where its version is written, for an adapter that rewrites it.
-export type Dep = { name: string; spec: string; isDev: boolean; installed?: string; display?: string; source?: string }
+// `isExact` says the project pinned this one version on purpose where a range
+// is the norm (SwiftPM's exact:, Xcode's exactVersion).
+export type Dep = { name: string; spec: string; isDev: boolean; installed?: string; display?: string; source?: string; isExact?: boolean }
 
 // The files an adapter read, by path: whichever of its manifests and
 // lockfiles exist.
@@ -29,6 +31,8 @@ export type Adapter = {
   // Files read only for what an upgrade breaks (Gradle's wrapper, for the
   // Gradle version the Android Gradle Plugin needs); a commit never carries them.
   contextFiles?: string[]
+  // The same, anywhere in the tree (each module's gradle.lockfile).
+  contextGlobs?: string[]
   parse: (files: Files) => Dep[]
   // Where its registry answers the latest release of `name`, and how.
   latestUrl: (name: string) => string
