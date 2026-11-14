@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Audit, Ecosystem, Explained, Finding, Group, Job, Pending, Pr, Pull, Scan, Severity, Upgrade } from '../types'
+import type { Audit, Behind, Ecosystem, Explained, Finding, Group, Job, Pending, Pr, Pull, Scan, Severity, Upgrade } from '../types'
 import { BATCH_SIZE, OSV_BATCH, OSV_ECOSYSTEM, OSV_VULN, SEVERITIES, SEVERITY_TITLE, batchBody, batchIds, bySeverity, fixedBy, mergeVulns, vulnCopyText, vulnOf, worstOf } from './osv'
 import type { Package } from './osv'
 import {
@@ -64,7 +64,7 @@ import {
 import type { CiRun, CiView, Remote, SessionView, Task, Todos } from '../types'
 import { CI_POLL_MS, CI_WAIT_POLLS, ciLabel, ciMark, isGoing, jobsOf, latestRuns, markOf, runListArgv, runViewArgv } from './ci'
 import { TODO_FILE, TOOL_ADD, TOOL_DONE, TOOL_LIST, TOOL_TEMPLATE, damagedPath, findTask, newTask, parseEntry, parseTodoFile, serializeTodos, templateArg, templateMatches, templatePrompt, todosColor, todosLabel, todosText, withExclude } from './todos'
-import { COMMAND, COMMAND_HELP, GROUPS, HEALTH_SIZE, NARSIL_SIZE, PALETTE, PANE, TITLE, agoLabel, auditSummary, commandHelp, groupLabel, healthOf, healthSvg, narsilSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, skippedNote, sortUpgrades, summaryOf, tail } from './words'
+import { COMMAND, COMMAND_HELP, GROUPS, HEALTH_SIZE, NARSIL_SIZE, PALETTE, PANE, TITLE, agoLabel, auditSummary, behindNote, commandHelp, groupLabel, healthOf, healthSvg, narsilSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, skippedNote, sortUpgrades, summaryOf, tail } from './words'
 import type { SkippedEcosystem } from './words'
 import { PARADA_CLARO, PARADA_OSCURO } from './narsil-art'
 
@@ -74,13 +74,14 @@ const scan = atom({ plugin: 'narsil-check', key: 'scan' } as const, { status: 'i
 const job = atom({ plugin: 'narsil-check', key: 'job' } as const, { status: 'idle' } as Job, { shape: 'job-1' })
 const NO_PENDING: Pending = { changes: [], files: [], manager: 'npm', branch: '', isMain: false }
 const pending = atom({ plugin: 'narsil-check', key: 'pending' } as const, NO_PENDING, { shape: 'pending-2' })
-const pr = atom({ plugin: 'narsil-check', key: 'pr' } as const, { status: 'idle' } as Pr, { shape: 'pr-2' })
+const pr = atom({ plugin: 'narsil-check', key: 'pr' } as const, { status: 'idle' } as Pr, { shape: 'pr-3' })
 const reasons = atom({ plugin: 'narsil-check', key: 'reasons' } as const, {} as Record<string, Explained>, { shape: 'reasons-1' })
 const audit = atom({ plugin: 'narsil-check', key: 'audit' } as const, { status: 'idle' } as Audit, { shape: 'audit-1' })
 // Whether the vulnerabilities section is open; kept in the store too.
 // The groups folded shut, and the last pull of the branch.
 const closedGroups = atom({ plugin: 'narsil-check', key: 'closedGroups' } as const, [] as string[], { shape: 'closed-1' })
 const pull = atom({ plugin: 'narsil-check', key: 'pull' } as const, { status: 'idle' } as Pull, { shape: 'pull-1' })
+const behind = atom({ plugin: 'narsil-check', key: 'behind' } as const, { status: 'unknown' } as Behind, { shape: 'behind-1' })
 const isVulnsOpen = atom({ plugin: 'narsil-check', key: 'isVulnsOpen' } as const, false, { shape: 'open-1' })
 const OSV_CONCURRENCY = 8
 const OSV_MS = 30_000
@@ -620,7 +621,28 @@ async function scanGeneric($: EngineInterface, adapter: Adapter, present: string
   return { upgrades, held: 0, checked: found.filter(f => f !== undefined).length, failed }
 }
 
+// Whether the checked-out branch lacks commits its upstream has: a fetch,
+// then the count of what the upstream holds that HEAD does not. No upstream,
+// no network or a detached HEAD leave it unknown, and nothing shows.
+async function checkBehind($: EngineInterface): Promise<void> {
+  let value: Behind = { status: 'unknown' }
+  try {
+    const branch = await $.process.run(['git', 'branch', '--show-current'], { timeoutMs: GIT_MS })
+    const name = branch.exitCode === 0 ? branch.stdout.trim() : ''
+    if (name) {
+      await $.process.run(['git', 'fetch', '--quiet'], { timeoutMs: GIT_MS })
+      const counted = await $.process.run(['git', 'rev-list', '--count', 'HEAD..@{upstream}'], { timeoutMs: GIT_MS })
+      const count = Number.parseInt(counted.stdout.trim(), 10)
+      if (counted.exitCode === 0 && Number.isFinite(count)) value = { status: 'checked', branch: name, count }
+    }
+  } catch {
+    // Unknown: the warning stays hidden.
+  }
+  await update($, behind, () => value)
+}
+
 async function scanProject($: EngineInterface, isFresh: boolean): Promise<void> {
+  void checkBehind($).catch(() => undefined)
   const ecosystems = await detected($)
   if (ecosystems.length === 0) {
     await setScan($, { status: 'none' })
@@ -811,9 +833,10 @@ async function step($: EngineInterface, label: string, argv: string[]): Promise<
 
 // A commit of package.json and its lockfile alone, then a push. On a work
 // branch that is all: the person takes it from there. On the default branch
-// the commit goes to a new branch first, with a PR back to it; that branch
-// stays checked out, since going back would put the old versions in
-// package.json while node_modules holds the new ones.
+// the commit goes to a new branch first, with a PR back to it, and then the
+// default branch is checked out again (a switch git refuses keeps the new
+// branch and says why). Back there the manifests hold the old versions while
+// installed packages may hold the new ones, so the libraries are read again.
 async function publish($: EngineInterface): Promise<void> {
   if ((await read($, pr)).status === 'running') return
   const { changes, files, manager } = await read($, pending)
@@ -840,8 +863,19 @@ async function publish($: EngineInterface): Promise<void> {
     await step($, 'Subiendo la rama', ['git', 'push', '-u', 'origin', branch])
     const out = await step($, 'Creando el PR', ['gh', 'pr', 'create', '--base', base, '--head', branch, '--title', commitTitle(changes), '--body', prBody(changes, manager)])
     const url = prUrlOf(out) ?? out.trim()
-    await setPr($, { status: 'done', url, branch })
-    $.ui.toast(`PR creado: ${url}`)
+    let backError: string | undefined
+    try {
+      const back = await runCommand($, ['git', 'switch', base], GIT_MS)
+      if (back.exitCode !== 0) backError = tail(back.stderr || back.stdout) || `git switch terminó con código ${back.exitCode}`
+    } catch (err) {
+      backError = errorText(err)
+    }
+    await setPr($, { status: 'done', url, branch, base, ...(backError ? { backError } : {}) })
+    $.ui.toast(backError ? `PR creado: ${url}. No pude volver a ${base}.` : `PR creado: ${url}. Volviste a ${base}.`)
+    if (!backError) {
+      void loadSession($, true, false).catch(() => undefined)
+      void runScan($, true).catch(() => undefined)
+    }
   } catch (err) {
     await setPr($, { status: 'failed', message: err instanceof Error ? err.message : String(err) })
   }
@@ -1364,7 +1398,10 @@ export const register: Register = on => {
     void loadSessionAtStart($).catch(() => undefined)
     // Opens on every session: it stands in for the app's session bar.
     await $.ui.open({ id: PANE, title: TITLE }).catch(() => undefined)
+    // The scan also checks whether the branch is behind its remote; with
+    // nothing to scan, that check still runs.
     if ((await detected($)).length > 0) void runScan($).catch(() => undefined)
+    else void checkBehind($).catch(() => undefined)
     return next(e)
   })
 
@@ -1862,9 +1899,23 @@ export const register: Register = on => {
         </Box>
       ) : null
 
+    // A branch the last review found behind its remote: a red panel at the
+    // top, bold, with the pull right there.
+    const lag = await read($, behind)
+    const behindWarning =
+      lag.status === 'checked' && lag.count > 0 ? (
+        <Box key="behind" {...panel(PALETTE.error)} alignItems="center" {...(isRich ? { backgroundColor: tint(PALETTE.error), paddingY: 1 } : {})}>
+          <Text bold color={PALETTE.error}>
+            {behindNote(lag.branch, lag.count)}
+          </Text>
+          {pulled.status === 'running' ? <Text dimColor>Actualizando la rama…</Text> : <Button key="behind-pull" onPress={() => pullBranch($)}>Actualizar rama</Button>}
+        </Box>
+      ) : null
+
     const frame = (body: JSX.Element) => (
       <Box flexDirection="column">
         {head}
+        {behindWarning}
         {picture}
         {healthStrip}
         {sessionSection}

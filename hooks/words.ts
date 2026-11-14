@@ -202,12 +202,17 @@ export function prNote(pr: Pr): { text: string; color: string } | undefined {
     case 'failed':
       return { text: `No pude crear el PR. ${pr.message}`, color: PALETTE.error }
     case 'done':
-      return pr.url
-        ? { text: `PR creado desde la rama ${pr.branch}. Sigues en esa rama.`, color: PALETTE.done }
-        : { text: `Commit subido a la rama ${pr.branch}.`, color: PALETTE.done }
+      if (!pr.url) return { text: `Commit subido a la rama ${pr.branch}.`, color: PALETTE.done }
+      if (pr.backError) return { text: `PR creado desde la rama ${pr.branch}. No pude volver a ${pr.base}: ${pr.backError}`, color: PALETTE.waiting }
+      return { text: `PR creado desde la rama ${pr.branch}. ${pr.base ? `Volviste a ${pr.base}.` : 'Sigues en esa rama.'}`, color: PALETTE.done }
     default:
       return undefined
   }
+}
+
+// The warning a branch behind its remote gets at the top of the pane.
+export function behindNote(branch: string, count: number): string {
+  return `⚠ La rama ${branch || 'actual'} está ${count} ${count === 1 ? 'commit' : 'commits'} detrás de su remota: actualízala antes de seguir.`
 }
 
 // What a successful git pull -r did, in a few words: up to date, rebased,

@@ -32,6 +32,8 @@ Dentro de **Actualizaciones** y **Vulnerabilidades**, cada grupo (**Bloqueada**,
 
 Al final del panel, **Actualizar rama** hace `git pull -r` en la rama en la que estás: trae lo nuevo de la remota y vuelve a poner encima tus commits locales. Si git no puede hacerlo (un conflicto o cambios sin commit), lo dice y muestra el motivo. Lo ejecuta el mod directamente, sin pasar por los permisos de la app, y después vuelve a revisar las librerías.
 
+Cada revisión de librerías (al abrir la sesión, con **Revisar de nuevo** o con `/narsil-check upgrade`) también hace `git fetch` y cuenta los commits que la remota de tu rama tiene y tú no. Si te falta alguno, arriba del todo aparece un aviso rojo, *"⚠ La rama feat/login está 3 commits detrás de su remota: actualízala antes de seguir."*, con su propio botón **Actualizar rama**. Sin rama remota, sin red o con `HEAD` separado no se muestra nada. Tras un pull correcto se revisa de nuevo y el aviso desaparece.
+
 ### Entorno
 Lo que enseña la barra de sesión de la app de escritorio, para que puedas ocultarla:
 
@@ -145,7 +147,8 @@ Cuando los manifests (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, 
 - **En la rama principal** (**Crear rama, commit y PR**), la que indica `origin/HEAD` o, si no hay, `main` o `master`:
   1. Crea la rama `chore/upgrade-deps-AAAA-MM-DD`. Si ese nombre ya existe, le agrega la hora.
   2. Hace el commit y sube la rama a `origin`.
-  3. Abre el PR con `gh` contra la rama principal. Te quedas en la rama nueva: volver a la principal dejaría en `package.json` las versiones viejas mientras `node_modules` tiene las nuevas.
+  3. Abre el PR con `gh` contra la rama principal.
+  4. Vuelve a la rama principal (`git switch`) y revisa de nuevo las librerías. Ahí los manifests tienen las versiones viejas y lo instalado (`node_modules`) puede tener las nuevas: reinstala si vas a seguir trabajando en la principal. Si git no puede cambiar de rama, te quedas en la nueva y el panel dice por qué.
 
 En los dos casos, el commit lleva solo los manifests y lockfiles de los ecosistemas que cambiaron, con el mensaje `chore(deps): upgrade N dependencies` y la lista de cambios. El resto de tus cambios sin commit no se incluye. Claude Code ejecuta git con los hooks del repositorio desactivados, así que los hooks de commit (por ejemplo, husky) no corren.
 

@@ -582,6 +582,25 @@ test('"Actualizar rama", last in the pane, pulls the checked-out branch with a r
   await ui.unmount()
 })
 
+test('a review that finds the branch behind its remote shows a big warning at the top, with the pull at hand', async ($, on) => {
+  app(on, { state: 'off' }, 0, { 'git fetch --quiet': '', 'git rev-list --count HEAD..@{upstream}': '3\n' })
+  await opened($, on)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Box', key: 'behind' }))?.props.borderColor).toBe('#F0435A')
+  expect((await ui.find({ type: 'Text', text: /detrás/ }))?.text).toBe('⚠ La rama feat/login está 3 commits detrás de su remota: actualízala antes de seguir.')
+  expect((await ui.findAll({ type: 'Button' })).map(b => b.key)).toContain('behind-pull')
+  await ui.unmount()
+})
+
+test('a branch up to date with its remote, or with none, shows no warning', async ($, on) => {
+  app(on, { state: 'off' }, 0, { 'git fetch --quiet': '', 'git rev-list --count HEAD..@{upstream}': '0\n' })
+  await opened($, on)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Box', key: 'behind' })).toBeUndefined()
+  await ui.unmount()
+})
+
 test('the words of each pull that went well', () => {
   expect(pullSummary('Current branch main is up to date.\n')).toBe('ya estaba al día')
   expect(pullSummary('Already up to date.\n')).toBe('ya estaba al día')

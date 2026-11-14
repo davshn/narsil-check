@@ -456,13 +456,30 @@ test('the PR button makes a branch, commits package.json and the lock, pushes an
     'git push -u',
     'gh pr create',
   ])
+  // With the PR made, the pane goes back to the branch the PR targets.
+  const after = ran.slice(before).map(argv => argv.join(' '))
+  expect(after.indexOf('git switch main')).toBeGreaterThan(after.findIndex(line => line.startsWith('gh pr create')))
   // Only package.json and its lockfile go in the commit.
   expect(git.find(argv => argv[1] === 'add')).toEqual(['git', 'add', '--', 'package.json', 'package-lock.json'])
   const commit = git.find(argv => argv[1] === 'commit') ?? []
   expect(commit.slice(-3)).toEqual(['--', 'package.json', 'package-lock.json'])
   expect(commit[3]).toBe('chore(deps): upgrade 2 dependencies')
   expect(git.find(argv => argv[0] === 'gh')?.slice(0, 7)).toEqual(['gh', 'pr', 'create', '--base', 'main', '--head', branch])
-  expect((await ui.find({ type: 'Text', text: /^PR creado/ }))?.text).toBe(`PR creado desde la rama ${branch}. Sigues en esa rama.`)
+  expect((await ui.find({ type: 'Text', text: /^PR creado/ }))?.text).toBe(`PR creado desde la rama ${branch}. Volviste a main.`)
+  await ui.unmount()
+})
+
+test('a PR that is made but cannot go back to the default branch says so and stays on the new branch', async ($, on) => {
+  project(on, { ...FILES }, { ...LATEST })
+  host(on, 'git switch main')
+  on('ui.toast', () => ({ value: undefined }))
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'publish-pr' })
+
+  expect((await ui.find({ type: 'Text', text: /^PR creado/ }))?.text).toMatch(/^PR creado desde la rama chore\/upgrade-deps-[\d-]+\. No pude volver a main: fatal: no remote$/)
   await ui.unmount()
 })
 

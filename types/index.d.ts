@@ -63,7 +63,11 @@ export type Pr =
   | { status: 'idle' }
   | { status: 'running'; step: string }
   | { status: 'failed'; message: string }
-  | { status: 'done'; branch: string; url?: string }
+  | { status: 'done'; branch: string; url?: string; base?: string; backError?: string }
+
+// What the last review found of the checked-out branch against its upstream:
+// how many commits it lacks, or nothing known (no upstream, no network).
+export type Behind = { status: 'unknown' } | { status: 'checked'; branch: string; count: number }
 
 // Haiku's reading of why a major upgrade is not a plain bump, per jump
 // ("name@from->to"): asked once and kept.
@@ -160,6 +164,8 @@ declare module 'claude-code' {
       closedGroups: Shaped<string[]>
       // How the last "Actualizar rama" went.
       pull: Shaped<Pull>
+      // Whether the branch was behind its remote at the last review.
+      behind: Shaped<Behind>
     }
   }
 }
