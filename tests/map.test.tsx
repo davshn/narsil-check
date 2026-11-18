@@ -1,8 +1,72 @@
 import { expect, test } from 'claude-code/testing'
 
 import { classify, clean, firstLine, memoryIds, shortModel } from '../hooks/map/classify'
+import { SVG_LIMIT, describeMap, drawMap } from '../hooks/map/draw'
 import { SETUP, STATIONS } from '../hooks/map/stations'
-import { WORDS } from '../hooks/map/words'
+import { WORDS, mapLabel, mapTone } from '../hooks/map/words'
+import { PARADA_CLARO, PARADA_OSCURO } from '../hooks/narsil-art'
+import { PALETTE } from '../hooks/words'
+import type { MapBoard } from '../types'
+
+const NARSIL = { light: PARADA_CLARO, dark: PARADA_OSCURO }
+const NOW = 1_000_000
+const IDS = ['you', 'model', 'memory', 'files', 'shell', 'web', 'browser', 'agents', 'skills', 'hooks'] as const
+
+/** A board at its fullest: every kept entry running, long labels, a subagent crew, a model switch. */
+const fullest: MapBoard = {
+  model: 'claude-opus-5-5',
+  step: 12,
+  context: 93,
+  switchedAt: NOW - 100,
+  agents: ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'],
+  faults: { shell: 3 },
+  counts: { files: 12345, memory: 9 },
+  pushed: 4,
+  entries: Array.from({ length: 80 }, (_, i) => ({
+    id: String(i),
+    station: IDS[i % IDS.length] as (typeof IDS)[number],
+    label: 'x'.repeat(70),
+    from: 'core' as const,
+    startedAt: NOW - 100 - i,
+    status: 'run' as const,
+  })),
+}
+
+test('the map at its fullest, with baby Narsil, stays within what Svg accepts', () => {
+  const svg = drawMap(fullest, NOW, NARSIL)
+  expect(svg.length).toBeLessThanOrEqual(SVG_LIMIT)
+  expect(svg).toContain(PARADA_CLARO.src)
+  expect(svg).toContain(PARADA_OSCURO.src)
+  expect(svg).toContain('<animateMotion')
+  expect(svg).toContain('opus 5.5 · 93%')
+  // Labels never reach the drawing, and every number is a number.
+  expect(svg).not.toContain('xxxxx')
+  expect(svg).not.toContain('NaN')
+  expect(svg).not.toContain('Infinity')
+  expect(svg).not.toContain('=""')
+  expect(/"[a-z-]+="/.test(svg)).toBe(false)
+  // Narsil's colors, repainted for a light surface.
+  expect(svg).toContain(`fill="${PALETTE.error.toLowerCase()}"`)
+  expect(svg).toContain('@media (prefers-color-scheme: light)')
+})
+
+test('pictures too big for Svg leave the map whole, with her name at the core', () => {
+  const huge = { src: `data:image/png;base64,${'A'.repeat(SVG_LIMIT)}`, width: 90, height: 150 }
+  const svg = drawMap({ entries: [], counts: {} }, NOW, { light: huge, dark: huge })
+  expect(svg.length).toBeLessThanOrEqual(SVG_LIMIT)
+  expect(svg).toContain('>NARSIL</text>')
+  expect(svg).not.toContain('<image')
+})
+
+test('the section reads its state: its toggle, its color and what a reader hears', () => {
+  expect(mapLabel(true)).toBe('▾ Mapa')
+  expect(mapLabel(false)).toBe('▸ Mapa')
+  expect(mapTone({ entries: [], counts: {} })).toBe(PALETTE.done)
+  expect(mapTone({ ...fullest, faults: {} })).toBe(PALETTE.info)
+  expect(mapTone(fullest)).toBe(PALETTE.error)
+  expect(describeMap({ entries: [], counts: {}, context: 41.6 })).toBe('Mapa. No hay nada en ejecución. · contexto 42%')
+  expect(describeMap({ ...fullest, entries: fullest.entries.slice(0, 2).map(e => ({ ...e, label: 'b/c.ts' })) })).toBe('Mapa. Modelo: b/c.ts y 1 más · contexto 93%')
+})
 
 const at = (tool: string, input: Record<string, unknown> = {}) => classify(tool, input, SETUP)
 

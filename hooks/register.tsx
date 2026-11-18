@@ -64,9 +64,13 @@ import {
 import type { CiRun, CiView, Remote, SessionView, Task, Todos } from '../types'
 import { CI_POLL_MS, CI_WAIT_POLLS, ciLabel, ciMark, isGoing, jobsOf, latestRuns, markOf, runListArgv, runViewArgv } from './ci'
 import { TODO_FILE, TOOL_ADD, TOOL_DONE, TOOL_LIST, TOOL_TEMPLATE, damagedPath, findTask, newTask, parseEntry, parseTodoFile, serializeTodos, templateArg, templateMatches, templatePrompt, todosColor, todosLabel, todosText, withExclude } from './todos'
-import { COMMAND, COMMAND_HELP, GROUPS, HEALTH_SIZE, NARSIL_SIZE, PALETTE, PANE, TITLE, agoLabel, auditSummary, behindNote, commandHelp, groupLabel, healthOf, healthSvg, narsilSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, skippedNote, sortUpgrades, summaryOf, tail } from './words'
+import { COMMAND, COMMAND_HELP, GROUPS, HEALTH_SIZE, PALETTE, PANE, TITLE, agoLabel, auditSummary, behindNote, commandHelp, groupLabel, healthOf, healthSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, skippedNote, sortUpgrades, summaryOf, tail } from './words'
 import type { SkippedEcosystem } from './words'
 import { PARADA_CLARO, PARADA_OSCURO } from './narsil-art'
+import { readBoard } from './map/board'
+import { describeMap, drawMap } from './map/draw'
+import { mapToolCall, mapTurnComplete, mapTurnStart, registerMap } from './map/hooks'
+import { mapLabel, mapTone } from './map/words'
 
 // Change a tag when its type's fields change: it declines what an earlier
 // version stored, which outlives a reload.
@@ -100,6 +104,8 @@ const GH_MS = 30_000
 // Pendientes: the list, whether it is unfolded, and the tasks whose content shows.
 const todos = atom({ plugin: 'narsil-check', key: 'todos' } as const, { isLoaded: false, tasks: [] } as Todos, { shape: 'todos-2' })
 const isTodosOpen = atom({ plugin: 'narsil-check', key: 'isTodosOpen' } as const, false, { shape: 'open-1' })
+// Whether the work map is open; open at each session start.
+const isMapOpen = atom({ plugin: 'narsil-check', key: 'isMapOpen' } as const, true, { shape: 'open-1' })
 const openTodos = atom({ plugin: 'narsil-check', key: 'openTodos' } as const, [] as string[], { shape: 'ids-1' })
 
 // Haiku reads each major jump once: its reading is kept in the store for good.
@@ -1382,6 +1388,9 @@ async function registerTools($: EngineInterface): Promise<void> {
 }
 
 export const register: Register = on => {
+  // The work map listens first: every hook of its own passes its event on unchanged.
+  registerMap(on)
+
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: COMMAND, description: COMMAND_HELP, argumentHint: 'upgrade | vulns | template "…"' })
     void registerTools($).catch(() => undefined)
@@ -1389,8 +1398,9 @@ export const register: Register = on => {
     void loadTodos($)
       .then(tasks => update($, isTodosOpen, () => tasks.length > 0))
       .catch(() => undefined)
-    // Every session starts the same: Entorno open, Conectores folded, and
-    // Actualizaciones and Vulnerabilidades folded until they find something.
+    // Every session starts the same: Mapa and Entorno open, Conectores folded,
+    // and Actualizaciones and Vulnerabilidades folded until they find something.
+    await update($, isMapOpen, () => true)
     await update($, isEnvOpen, () => true)
     await update($, isConnectorsOpen, () => false)
     await update($, isUpgradeOpen, () => false)
@@ -1425,7 +1435,7 @@ export const register: Register = on => {
         void loadSession($).catch(() => undefined)
       }
     }
-    return next(e)
+    return mapTurnStart($, e, next)
   })
 
   on('tool.call', async ($, e, next) => {
@@ -1433,11 +1443,11 @@ export const register: Register = on => {
     const isPrCommand = SHELL_TOOLS.test(e.tool) && typeof command === 'string' && PR_COMMANDS.test(command)
     if (isInTurn && (SESSION_TOOLS.test(e.tool) || isPrCommand)) isSessionTouched = true
     if (isInTurn && isPrCommand) isPrTouched = true
-    return next(e)
+    return mapToolCall($, e, next)
   })
 
   on('turn.complete', async ($, e, next) => {
-    const result = await next(e)
+    const result = await mapTurnComplete($, e, next)
     if (e.agentId === undefined) {
       isInTurn = false
       const view = await read($, session)
@@ -1562,11 +1572,33 @@ export const register: Register = on => {
         </Text>
       </Box>
     )
-    const picture = Svg ? (
-      <Box key="narsil" flexDirection="row" justifyContent="center">
-        <Svg source={narsilSvg(PARADA_CLARO, PARADA_OSCURO)} alt="Narsil bebé" width={NARSIL_SIZE.width} height={NARSIL_SIZE.height} />
-      </Box>
-    ) : null
+    // The work map, first of the sections, with baby Narsil at its core. The
+    // terminal draws no SVG, so there the section is left out.
+    const mapOpen = await read($, isMapOpen)
+    const toggleMap = async () => {
+      await update($, isMapOpen, value => !value)
+    }
+    const board = Svg && e.surface !== 'terminal' ? await readBoard($) : undefined
+    // A clock that cannot be read must not take the pane down: the map is then
+    // drawn at the moment of its newest entry.
+    const last = board?.entries.at(-1)
+    const now = board ? await $.clock.now().catch(() => last?.endedAt ?? last?.startedAt ?? 0) : 0
+    const mapSection =
+      Svg && board ? (
+        <Box key="panel-map" {...panel(mapTone(board))}>
+          <Box flexDirection="row" gap={1}>
+            <Text bold color={mapTone(board)}>
+              ●
+            </Text>
+            <Button key="section-map" plain label={mapLabel(mapOpen)} onPress={toggleMap} />
+          </Box>
+          {mapOpen ? (
+            <Box key="map" flexDirection="row" justifyContent="center">
+              <Svg source={drawMap(board, now, { light: PARADA_CLARO, dark: PARADA_OSCURO })} alt={describeMap(board)} />
+            </Box>
+          ) : null}
+        </Box>
+      ) : null
     // The upgrade section's head: a toggle, its name in the color of what
     // most needs you, and its count when it has one.
     const color = sectionColor(state)
@@ -1916,7 +1948,7 @@ export const register: Register = on => {
       <Box flexDirection="column">
         {head}
         {behindWarning}
-        {picture}
+        {mapSection}
         {healthStrip}
         {sessionSection}
         <Box key="panel-upgrade" {...panel(color)}>

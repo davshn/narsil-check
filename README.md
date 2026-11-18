@@ -9,7 +9,7 @@
 >
 > Un taller gratuito, en español, inglés, italiano, francés y portugués de Brasil, que enseña paso a paso a construir mods de Claude Code como [Narsil](https://github.com/davshn/narsil-pet) y Narsil Check, y a montar un bot de escritorio de Narsil con cuerpo: una pantalla táctil ESP32-P4 en la barriga y una cabeza holográfica ESP32-S3, que habla con Xiaozhi y Claude desde tu propio servidor y muestra tus pull requests de GitHub y el estado de Narsil. Sin registro, sin analítica, y nunca te pide tokens ni claves.
 
-Narsil Check es el compañero de [Narsil](https://github.com/davshn/narsil-pet): un panel lateral, con sus mismos colores, que revisa el proyecto en el que trabajas. Muestra el entorno de la sesión (repositorio, carpeta, rama, conectores, control remoto y Auto-fix), qué librerías se pueden actualizar y cuánto cuesta hacerlo, qué vulnerabilidades conocidas tienen los paquetes instalados y una lista de tareas pendientes del proyecto. Con él puedes ocultar la barra de sesión de la app de escritorio y quedarte con un solo panel.
+Narsil Check es el compañero de [Narsil](https://github.com/davshn/narsil-pet): un panel lateral, con sus mismos colores, que revisa el proyecto en el que trabajas. Muestra un mapa animado de lo que Claude está haciendo, el entorno de la sesión (repositorio, carpeta, rama, conectores, control remoto y Auto-fix), qué librerías se pueden actualizar y cuánto cuesta hacerlo, qué vulnerabilidades conocidas tienen los paquetes instalados y una lista de tareas pendientes del proyecto. Con él puedes ocultar la barra de sesión de la app de escritorio y quedarte con un solo panel.
 
 Lee proyectos de JavaScript y TypeScript (npm y Expo), Python (PyPI), Go, Rust (Cargo), Dart o Flutter (Pub), Kotlin y Java (Gradle y Maven), C# (NuGet), Ruby (RubyGems) y Swift (SwiftPM).
 
@@ -28,15 +28,28 @@ Es un mod de Claude Code de **código abierto**, publicado bajo la licencia [GPL
 ## Funcionalidades
 
 ### El panel
-El panel se abre al empezar cada sesión, aunque no haya nada que revisar. Arriba, centrados, están el título **● Narsil Check** y Narsil bebé debajo (en su versión clara u oscura, según el tema de la app; la terminal no dibuja imágenes), y después cada revisión como una sección que se pliega y se despliega con su cabecera (`▾ Actualizaciones · 3` / `▸ Actualizaciones · 3`). El punto de color de cada sección dice lo más urgente que tiene, con la paleta de Narsil: rojo si algo bloquea o falla, amarillo si algo te espera, verde si está al día y azul para lo informativo.
+El panel se abre al empezar cada sesión, aunque no haya nada que revisar. Arriba, centrado, está el título **● Narsil Check**, y después cada revisión como una sección que se pliega y se despliega con su cabecera (`▾ Actualizaciones · 3` / `▸ Actualizaciones · 3`). El punto de color de cada sección dice lo más urgente que tiene, con la paleta de Narsil: rojo si algo bloquea o falla, amarillo si algo te espera, verde si está al día y azul para lo informativo.
 
-Cada sesión empieza igual: **Entorno** desplegado, **Conectores** plegado, y **Actualizaciones**, **Vulnerabilidades** y **Pendientes** plegadas hasta que tienen algo, momento en que se despliegan solas.
+Cada sesión empieza igual: **Mapa** y **Entorno** desplegados, **Conectores** plegado, y **Actualizaciones**, **Vulnerabilidades** y **Pendientes** plegadas hasta que tienen algo, momento en que se despliegan solas.
 
 Dentro de **Actualizaciones** y **Vulnerabilidades**, cada grupo (**Bloqueada**, **Versión mayor**, **Crítica**, **Alta**...) también se pliega con su propia cabecera (`▾ Bloqueada (2)` / `▸ Bloqueada (2)`), y el panel recuerda cuáles cerraste. Un clic en una librería o en una vulnerabilidad la copia al portapapeles: la librería con su salto y lo que la bloquea o la razón de Haiku, y la vulnerabilidad con su gravedad, el arreglo y el enlace a OSV.
 
 Al final del panel, **Actualizar rama** hace `git pull -r` en la rama en la que estás: trae lo nuevo de la remota y vuelve a poner encima tus commits locales. Si git no puede hacerlo (un conflicto o cambios sin commit), lo dice y muestra el motivo. Lo ejecuta el mod directamente, sin pasar por los permisos de la app, y después vuelve a revisar las librerías.
 
 Cada revisión de librerías (al abrir la sesión, con **Revisar de nuevo** o con `/narsil-check upgrade`) también hace `git fetch` y cuenta los commits que la remota de tu rama tiene y tú no. Si te falta alguno, arriba del todo aparece un aviso rojo, *"⚠ La rama feat/login está 3 commits detrás de su remota: actualízala antes de seguir."*, con su propio botón **Actualizar rama**. Sin rama remota, sin red o con `HEAD` separado no se muestra nada. Tras un pull correcto se revisa de nuevo y el aviso desaparece.
+
+### Mapa
+La primera sección es un mapa animado del trabajo de Claude en la sesión, con Narsil bebé en el centro (en su versión clara u oscura, según el tema de la app). Alrededor hay diez estaciones: **Tú**, **Modelo**, **Memoria**, **Archivos**, **Terminal**, **Red**, **Navegador**, **Agentes**, **Skills** y **Hooks**. Cada llamada a una herramienta sale de Narsil como un pulso hacia su estación, que se enciende mientras trabaja y muestra cuántas veces se usó.
+
+- **Los radios** se engrosan con el uso, y **la ruta** une las últimas estaciones visitadas y se desvanece con el tiempo.
+- **Dos manecillas** alrededor de una estación dicen cuánto lleva una llamada larga.
+- **Un punto rojo** marca un error o un rechazo de un hook, hasta tu siguiente mensaje.
+- **Un anillo** alrededor de Narsil dice cuánto contexto queda: ámbar al 70 % y rojo al 90 %. Debajo aparecen el modelo y el porcentaje.
+- **Los subagentes** que siguen trabajando giran alrededor de **Agentes**.
+
+El punto de la sección es azul mientras algo trabaja, rojo si algo falló y verde en reposo. El mapa solo usa nombres: de un archivo, las dos últimas partes de la ruta; de una web, el dominio; de un comando, su descripción o su nombre. Nunca muestra lo que se escribe, se busca o se guarda en memoria. La terminal no dibuja imágenes, así que allí la sección no aparece.
+
+El mapa viene de [lot-map](https://github.com/alexeyw/lot-map), de Aleksei Volodin (licencia MIT), adaptado a los colores de Narsil.
 
 ### Entorno
 Lo que enseña la barra de sesión de la app de escritorio, para que puedas ocultarla:
@@ -287,6 +300,7 @@ claude plugin test .
 
 - `hooks/register.tsx`: los hooks del mod (el panel, sus secciones, los botones y los comandos).
 - `hooks/words.ts`: cómo lo dice el panel (nombres de las secciones, colores, resúmenes, ayuda del comando).
+- `hooks/map/`: el mapa de trabajo, adaptado de lot-map (`classify.ts` reparte cada llamada en su estación, `board.ts` guarda lo que pasó, `hooks.ts` escucha los eventos y `draw.ts` dibuja el SVG animado).
 - `hooks/session.ts`: la sección de la sesión (Entorno, Conectores y los interruptores del control remoto y del Auto-fix).
 - `hooks/ci.ts`: el CI del PR paso a paso (los runs y pasos que da `gh`, sus marcas y el resumen del pliegue).
 - `hooks/todos.ts`: Pendientes (el archivo de la lista, el formato `nombre: contenido`, la exclusión de git y la búsqueda de plantillas).
@@ -306,3 +320,5 @@ Narsil Check es software libre: puedes redistribuirlo y modificarlo bajo los té
 En resumen: puedes usarlo, estudiarlo, modificarlo y compartirlo libremente, pero si distribuyes una versión modificada debes publicarla también como código abierto bajo la misma licencia. Se distribuye sin ninguna garantía. Consulta el archivo [LICENSE](LICENSE) para ver el texto completo.
 
 Copyright © 2026 Davshn
+
+El mapa de trabajo (`hooks/map/`) adapta código de [lot-map](https://github.com/alexeyw/lot-map), Copyright © 2026 Aleksei Volodin, publicado bajo la licencia MIT. Su aviso de copyright y de permiso está en [hooks/map/LICENSE-lot-map.txt](hooks/map/LICENSE-lot-map.txt).
