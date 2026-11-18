@@ -140,6 +140,49 @@ export type Task = { id: string; name: string; content?: string }
 // keeps a copy first). `notice`: what a change did about it.
 export type Todos = { isLoaded: boolean; tasks: Task[]; error?: string; notice?: string }
 
+// The work map, ported from lot-map (https://github.com/alexeyw/lot-map, MIT):
+// one station per kind of work, and what Claude did on each this session.
+export type StationId =
+  | 'you' | 'model' | 'memory' | 'files' | 'shell'
+  | 'web' | 'browser' | 'agents' | 'skills' | 'hooks'
+
+export type MapStatus = 'run' | 'ok' | 'err' | 'block'
+
+/** One action on the map. Labels carry names and record numbers, never content. */
+export type MapEntry = {
+  id: string
+  station: StationId
+  label: string
+  /** Where the pulse starts: the core, the agents station, or the station itself (a signal coming in). */
+  from: 'core' | 'agents' | 'inbound'
+  startedAt: number
+  endedAt?: number
+  status: MapStatus
+  /** The subagent whose loop made the call; absent for the main loop. */
+  agentId?: string
+  /** The background task the call started; the entry stays open until that task reports back. */
+  task?: string
+  /** A moment the map marks: the model changed, or the answer is ready. */
+  mark?: 'switch' | 'done'
+}
+
+export type MapBoard = {
+  entries: MapEntry[]
+  counts: Partial<Record<StationId, number>>
+  model?: string
+  step?: number
+  /** How many of the memory station's count a hook brought unasked. */
+  pushed?: number
+  /** Errors and refusals per station since the person's last message. */
+  faults?: Partial<Record<StationId, number>>
+  /** Subagents whose loops are still going. */
+  agents?: string[]
+  /** How full the context window is, 0 to 100. */
+  context?: number
+  /** When the model last changed. */
+  switchedAt?: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'narsil-check': {
@@ -166,6 +209,9 @@ declare module 'claude-code' {
       pull: Shaped<Pull>
       // Whether the branch was behind its remote at the last review.
       behind: Shaped<Behind>
+      // The work map: what Claude did this session, and whether its section is open.
+      board: Shaped<MapBoard>
+      isMapOpen: Shaped<boolean>
     }
   }
 }
