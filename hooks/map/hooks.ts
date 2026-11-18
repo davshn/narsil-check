@@ -5,7 +5,7 @@
 import type { EngineInterface, Hook, On } from 'claude-code'
 
 import type { MapEntry as Entry } from '../../types'
-import { background, begin, change, contextOf, finish, keepNewest, kept, newId, quietly, settle, taskNotice, taskOf } from './board'
+import { background, begin, change, contextOf, expired, finish, keepNewest, kept, newId, quietly, settle, taskNotice, taskOf } from './board'
 import { classify, clean, shortModel } from './classify'
 import { SETUP } from './stations'
 import { WORDS as t } from './words'
@@ -63,11 +63,12 @@ export async function mapTurnComplete($: EngineInterface, e: TurnCompleteArgs[1]
       ...(e.isAborted ? {} : { mark: 'done' as const }),
     })
     // An interrupted call never reports back; left alone its entry would pulse for the rest of the session.
+    // Nor does a background task whose notification never came: it is closed once it is an hour old.
     await quietly(async () => {
       const now = await $.clock.now()
       await change($, b => ({
         ...b,
-        entries: b.entries.map(x => (x.status === 'run' && x.from === 'core' && x.task === undefined ? { ...x, status: 'ok' as const, endedAt: now } : x)),
+        entries: expired(b.entries, now).map(x => (x.status === 'run' && x.from === 'core' && x.task === undefined ? { ...x, status: 'ok' as const, endedAt: now } : x)),
       }))
     })
   }
@@ -76,24 +77,31 @@ export async function mapTurnComplete($: EngineInterface, e: TurnCompleteArgs[1]
 
 type ToolCallArgs = Parameters<Hook<'tool.call'>>
 export async function mapToolCall($: EngineInterface, e: ToolCallArgs[1], next: ToolCallArgs[2]): Promise<Awaited<ReturnType<Hook<'tool.call'>>>> {
-  const id = await quietly(async () => {
+  // The tool never waits on the map: the entry is written beside the call, and closed once both are done.
+  const started = quietly(async () => {
     const seen = classify(e.tool, e as unknown as Record<string, unknown>, SETUP)
     return begin($, { ...seen, ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
   })
+  const close = (how: (id: string | undefined) => Promise<void>): void => {
+    void started.then(how).catch(() => undefined)
+  }
   try {
     const ran = await next(e)
     const wasRefused = ran.deny !== undefined || (e.tool_use_id !== undefined && refused.delete(e.tool_use_id))
     const task = wasRefused || ran.isError === true ? undefined : taskOf(ran.result)
-    if (task !== undefined) {
-      await background($, id, task)
-      return ran
-    }
-    await finish($, id, wasRefused ? 'block' : ran.isError === true ? 'err' : 'ok')
+    if (task !== undefined) close(id => background($, id, task))
+    else close(id => finish($, id, wasRefused ? 'block' : ran.isError === true ? 'err' : 'ok'))
     return ran
   } catch (failure) {
-    await finish($, id, 'err')
+    close(id => finish($, id, 'err'))
     throw failure
   }
+}
+
+/** A new session starts with nothing remembered from the last one in this process. */
+export function resetMap(): void {
+  refused.clear()
+  lastModel = undefined
 }
 
 /** The events only the map listens to. */
@@ -129,22 +137,30 @@ export function registerMap(on: On): void {
   })
 
   on('classic.PreToolUse', async ($, e, next) => {
-    const startedAt = (await quietly(() => $.clock.now())) ?? 0
+    // The decision never waits on the map: the times are read beside it, and the entry written after.
+    const started = quietly(() => $.clock.now())
     const decided = await next(e)
-    const endedAt = (await quietly(() => $.clock.now())) ?? startedAt
-    if (decided.deny !== undefined) {
-      if (e.tool_use_id !== undefined) {
-        refused.add(e.tool_use_id)
-        keepNewest(refused, REFUSALS_KEPT)
-      }
-      // The refusal's words stay back: they may repeat the whole command.
-      await begin($, { station: 'hooks', label: t.stopped(e.tool), status: 'block', startedAt })
-    } else if (decided.ask !== undefined) {
-      await begin($, { station: 'hooks', label: t.askedPermission(e.tool), status: 'ok', startedAt, endedAt })
-    } else if (endedAt - startedAt >= 400) {
-      // A check that took a moment is worth seeing; the instant ones are not.
-      await begin($, { station: 'hooks', label: t.checkBefore(e.tool), status: 'ok', startedAt, endedAt })
+    // Kept now, before the tool's own hook looks for it.
+    if (decided.deny !== undefined && e.tool_use_id !== undefined) {
+      refused.add(e.tool_use_id)
+      keepNewest(refused, REFUSALS_KEPT)
     }
+    const ended = quietly(() => $.clock.now())
+    void Promise.all([started, ended])
+      .then(async ([from, to]) => {
+        const startedAt = from ?? 0
+        const endedAt = to ?? startedAt
+        if (decided.deny !== undefined) {
+          // The refusal's words stay back: they may repeat the whole command.
+          await begin($, { station: 'hooks', label: t.stopped(e.tool), status: 'block', startedAt })
+        } else if (decided.ask !== undefined) {
+          await begin($, { station: 'hooks', label: t.askedPermission(e.tool), status: 'ok', startedAt, endedAt })
+        } else if (endedAt - startedAt >= 400) {
+          // A check that took a moment is worth seeing; the instant ones are not.
+          await begin($, { station: 'hooks', label: t.checkBefore(e.tool), status: 'ok', startedAt, endedAt })
+        }
+      })
+      .catch(() => undefined)
     return decided
   })
 

@@ -46,6 +46,9 @@ La primera sección es un mapa animado del trabajo de Claude en la sesión, con 
 - **Un punto rojo** marca un error o un rechazo de un hook, hasta tu siguiente mensaje.
 - **Un anillo** alrededor de Narsil dice cuánto contexto queda: ámbar al 70 % y rojo al 90 %. Debajo aparecen el modelo y el porcentaje.
 - **Los subagentes** que siguen trabajando giran alrededor de **Agentes**.
+- **Una tarea en segundo plano** (un comando, un monitor o un agente lanzado aparte) sigue encendida hasta que avisa de que terminó. Si en una hora no avisa, se da por cerrada al final del turno.
+
+El mapa nunca hace esperar a una herramienta: anota cada llamada a la vez que se ejecuta. El panel lo redibuja como mucho cada 400 ms, así que una ráfaga de llamadas es un solo redibujado.
 
 El punto de la sección es azul mientras algo trabaja, rojo si algo falló y verde en reposo. El mapa solo usa nombres: de un archivo, las dos últimas partes de la ruta; de una web, el dominio; de un comando, su descripción o su nombre. Nunca muestra lo que se escribe, se busca o se guarda en memoria. La terminal no dibuja imágenes, así que allí la sección no aparece.
 

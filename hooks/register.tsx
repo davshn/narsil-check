@@ -69,7 +69,7 @@ import type { SkippedEcosystem } from './words'
 import { PARADA_CLARO, PARADA_OSCURO } from './narsil-art'
 import { readBoard } from './map/board'
 import { describeMap, drawMap } from './map/draw'
-import { mapToolCall, mapTurnComplete, mapTurnStart, registerMap } from './map/hooks'
+import { mapToolCall, mapTurnComplete, mapTurnStart, registerMap, resetMap } from './map/hooks'
 import { mapLabel, mapTone } from './map/words'
 
 // Change a tag when its type's fields change: it declines what an earlier
@@ -1400,6 +1400,7 @@ export const register: Register = on => {
       .catch(() => undefined)
     // Every session starts the same: Mapa and Entorno open, Conectores folded,
     // and Actualizaciones and Vulnerabilidades folded until they find something.
+    resetMap()
     await update($, isMapOpen, () => true)
     await update($, isEnvOpen, () => true)
     await update($, isConnectorsOpen, () => false)

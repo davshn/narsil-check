@@ -211,6 +211,8 @@ declare module 'claude-code' {
       behind: Shaped<Behind>
       // The work map: what Claude did this session, and whether its section is open.
       board: Shaped<MapBoard>
+      // The board as the pane last drew it: copied from `board` at most every 400 ms.
+      mapView: Shaped<MapBoard>
       isMapOpen: Shaped<boolean>
     }
   }

@@ -10,18 +10,53 @@ import { clean } from './classify'
 
 const KEEP = 80
 const CREW = 12
+/** Background tasks still running kept beyond the newest KEEP entries: the newest of them. */
+const KEEP_BACKGROUND = 16
+/** A background task that has not reported back in this long is closed at the end of a turn. */
+export const BACKGROUND_MAX_MS = 60 * 60_000
+/** The pane redraws the map at most this often: each redraw sends the whole SVG, Narsil's pictures included. */
+export const REDRAW_MS = 400
 
 // Change the tag when a field of MapEntry or MapBoard changes: it declines what an earlier version stored.
 const board = atom({ plugin: 'narsil-check', key: 'board' } as const, { entries: [], counts: {} } as Board, { shape: 'board-1' })
+// What the pane draws: the board as it stood at the last redraw. Only the pane reads it, so a write to
+// `board` redraws nothing until the next copy.
+const shown = atom({ plugin: 'narsil-check', key: 'mapView' } as const, { entries: [], counts: {} } as Board, { shape: 'board-1' })
 
-/** The board as it stands. Every read and write of the board is made in this file. */
+/** The board as the pane last drew it. Every read and write of the board is made in this file. */
 export function readBoard($: EngineInterface): Promise<Board> {
-  return read($, board)
+  return read($, shown)
+}
+
+let isRedrawPending = false
+
+/**
+ * Copies the board to what the pane draws, at most once every REDRAW_MS: a burst of writes is one redraw.
+ * Without a clock to wait on, the copy is made at once.
+ */
+async function redraw($: EngineInterface): Promise<void> {
+  if (isRedrawPending) return
+  isRedrawPending = true
+  try {
+    await $.clock.sleep(REDRAW_MS)
+  } catch {
+    // No clock: copy now.
+  } finally {
+    isRedrawPending = false
+  }
+  const current = await read($, board)
+  await update($, shown, () => current)
+}
+
+/** Every write of the board: the change, then a redraw on its way. */
+async function write($: EngineInterface, by: (b: Board) => Board): Promise<void> {
+  await update($, board, by)
+  void redraw($).catch(() => undefined)
 }
 
 /** The board changed by `by`. Not quiet: the caller says what a failure may reach. */
-export function change($: EngineInterface, by: (b: Board) => Board): Promise<unknown> {
-  return update($, board, by)
+export function change($: EngineInterface, by: (b: Board) => Board): Promise<void> {
+  return write($, by)
 }
 
 export const newId = (now: number): string => `${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`
@@ -49,11 +84,19 @@ export type Start = {
   patch?: Partial<Pick<Board, 'model' | 'step' | 'switchedAt'>>
 }
 
-/** The newest entries, and beside them every background task still going, however long ago it started. */
+const isBackground = (e: Entry): boolean => e.status === 'run' && e.task !== undefined
+
+/** The newest entries, and beside them the newest KEEP_BACKGROUND background tasks still going, however long ago they started. */
 export const kept = (entries: Entry[]): Entry[] => {
   const from = entries.length - KEEP
-  return from <= 0 ? entries : entries.filter((e, i) => i >= from || (e.status === 'run' && e.task !== undefined))
+  if (from <= 0) return entries
+  const older = entries.slice(0, from).filter(isBackground).slice(-KEEP_BACKGROUND)
+  return [...older, ...entries.slice(from)]
 }
+
+/** Closes the background tasks that have not reported back in BACKGROUND_MAX_MS: a notification that never came. */
+export const expired = (entries: Entry[], now: number): Entry[] =>
+  entries.map(e => (isBackground(e) && now - e.startedAt >= BACKGROUND_MAX_MS ? { ...e, status: 'ok' as const, endedAt: now } : e))
 
 const isFault = (status: Status): boolean => status === 'err' || status === 'block'
 
@@ -73,7 +116,7 @@ export async function begin($: EngineInterface, start: Start): Promise<string | 
       ...(start.agentId !== undefined ? { agentId: start.agentId } : {}),
       ...(start.mark !== undefined ? { mark: start.mark } : {}),
     }
-    await update($, board, b => ({
+    await write($, b => ({
       ...b,
       ...start.patch,
       entries: kept([...b.entries, entry]),
@@ -94,7 +137,7 @@ export async function finish($: EngineInterface, id: string | undefined, status:
   if (id === undefined) return
   await quietly(async () => {
     const now = await $.clock.now()
-    await update($, board, b => {
+    await write($, b => {
       const open = b.entries.find(e => e.id === id && e.status === 'run')
       return {
         ...b,
@@ -109,14 +152,14 @@ export async function finish($: EngineInterface, id: string | undefined, status:
 /** The call started work that goes on after it answered: its entry stays open under the task's id. */
 export async function background($: EngineInterface, id: string | undefined, task: string): Promise<void> {
   if (id === undefined) return
-  await quietly(() => update($, board, b => ({ ...b, entries: b.entries.map(e => (e.id === id && e.status === 'run' ? { ...e, task } : e)) })))
+  await quietly(() => write($, b => ({ ...b, entries: b.entries.map(e => (e.id === id && e.status === 'run' ? { ...e, task } : e)) })))
 }
 
 /** A background task ended: its entry closes, as a fault when the task failed. */
 export async function settle($: EngineInterface, task: string, status: Status): Promise<void> {
   await quietly(async () => {
     const now = await $.clock.now()
-    await update($, board, b => {
+    await write($, b => {
       const open = b.entries.find(e => e.task === task && e.status === 'run')
       if (open === undefined) return b
       return {
