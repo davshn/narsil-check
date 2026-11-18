@@ -30,7 +30,7 @@ Es un mod de Claude Code de **código abierto**, publicado bajo la licencia [GPL
 ### El panel
 El panel se abre al empezar cada sesión, aunque no haya nada que revisar. Arriba, centrado, está el título **● Narsil Check**, y después cada revisión como una sección que se pliega y se despliega con su cabecera (`▾ Actualizaciones · 3` / `▸ Actualizaciones · 3`). El punto de color de cada sección dice lo más urgente que tiene, con la paleta de Narsil: rojo si algo bloquea o falla, amarillo si algo te espera, verde si está al día y azul para lo informativo.
 
-Cada sesión empieza igual: **Mapa** y **Entorno** desplegados, **Conectores** plegado, y **Actualizaciones**, **Vulnerabilidades** y **Pendientes** plegadas hasta que tienen algo, momento en que se despliegan solas.
+Cada sesión empieza igual: **Mapa mental** y **Entorno** desplegados, **Conectores** plegado, y **Actualizaciones**, **Vulnerabilidades** y **Pendientes** plegadas hasta que tienen algo, momento en que se despliegan solas.
 
 Dentro de **Actualizaciones** y **Vulnerabilidades**, cada grupo (**Bloqueada**, **Versión mayor**, **Crítica**, **Alta**...) también se pliega con su propia cabecera (`▾ Bloqueada (2)` / `▸ Bloqueada (2)`), y el panel recuerda cuáles cerraste. Un clic en una librería o en una vulnerabilidad la copia al portapapeles: la librería con su salto y lo que la bloquea o la razón de Haiku, y la vulnerabilidad con su gravedad, el arreglo y el enlace a OSV.
 
@@ -38,8 +38,8 @@ Al final del panel, **Actualizar rama** hace `git pull -r` en la rama en la que 
 
 Cada revisión de librerías (al abrir la sesión, con **Revisar de nuevo** o con `/narsil-check upgrade`) también hace `git fetch` y cuenta los commits que la remota de tu rama tiene y tú no. Si te falta alguno, arriba del todo aparece un aviso rojo, *"⚠ La rama feat/login está 3 commits detrás de su remota: actualízala antes de seguir."*, con su propio botón **Actualizar rama**. Sin rama remota, sin red o con `HEAD` separado no se muestra nada. Tras un pull correcto se revisa de nuevo y el aviso desaparece.
 
-### Mapa
-La primera sección es un mapa animado del trabajo de Claude en la sesión, con Narsil bebé en el centro (en su versión clara u oscura, según el tema de la app). Alrededor hay diez estaciones: **Tú**, **Modelo**, **Memoria**, **Archivos**, **Terminal**, **Red**, **Navegador**, **Agentes**, **Skills** y **Hooks**. Cada llamada a una herramienta sale de Narsil como un pulso hacia su estación, que se enciende mientras trabaja y muestra cuántas veces se usó.
+### Mapa mental
+La primera sección, **Mapa mental**, es un mapa animado del trabajo de Claude en la sesión, con Narsil bebé en el centro (en su versión clara u oscura, según el tema de la app). Alrededor hay diez estaciones: **Tú**, **Modelo**, **Memoria**, **Archivos**, **Terminal**, **Red**, **Navegador**, **Agentes**, **Skills** y **Hooks**. Cada llamada a una herramienta sale de Narsil como un pulso hacia su estación, que se enciende mientras trabaja y muestra cuántas veces se usó.
 
 - **Los radios** se engrosan con el uso, y **la ruta** une las últimas estaciones visitadas y se desvanece con el tiempo.
 - **Dos manecillas** alrededor de una estación dicen cuánto lleva una llamada larga.

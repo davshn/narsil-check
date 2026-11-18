@@ -59,13 +59,13 @@ test('pictures too big for Svg leave the map whole, with her name at the core', 
 })
 
 test('the section reads its state: its toggle, its color and what a reader hears', () => {
-  expect(mapLabel(true)).toBe('▾ Mapa')
-  expect(mapLabel(false)).toBe('▸ Mapa')
+  expect(mapLabel(true)).toBe('▾ Mapa mental')
+  expect(mapLabel(false)).toBe('▸ Mapa mental')
   expect(mapTone({ entries: [], counts: {} })).toBe(PALETTE.done)
   expect(mapTone({ ...fullest, faults: {} })).toBe(PALETTE.info)
   expect(mapTone(fullest)).toBe(PALETTE.error)
-  expect(describeMap({ entries: [], counts: {}, context: 41.6 })).toBe('Mapa. No hay nada en ejecución. · contexto 42%')
-  expect(describeMap({ ...fullest, entries: fullest.entries.slice(0, 2).map(e => ({ ...e, label: 'b/c.ts' })) })).toBe('Mapa. Modelo: b/c.ts y 1 más · contexto 93%')
+  expect(describeMap({ entries: [], counts: {}, context: 41.6 })).toBe('Mapa mental. No hay nada en ejecución. · contexto 42%')
+  expect(describeMap({ ...fullest, entries: fullest.entries.slice(0, 2).map(e => ({ ...e, label: 'b/c.ts' })) })).toBe('Mapa mental. Modelo: b/c.ts y 1 más · contexto 93%')
 })
 
 const at = (tool: string, input: Record<string, unknown> = {}) => classify(tool, input, SETUP)

@@ -58,13 +58,14 @@ test('a failed call is a fault; an interrupted turn is none, and it settles a ca
   on('tool.call', (_, e) => (e.tool === 'Read' ? new Promise(() => {}) : ({ result: {}, isError: true } as never)))
 
   await $.tool.call({ tool: 'Bash', command: 'git status', description: 'Show status' })
-  void $.tool.call({ tool: 'Read', file_path: '/a/b/c.ts' })
-  expect((await map($)).alt).toBe('Mapa. Archivos: b/c.ts')
+  // Never answers: its rejection when the test ends is no failure of the map.
+  $.tool.call({ tool: 'Read', file_path: '/a/b/c.ts' }).catch(() => undefined)
+  expect((await map($)).alt).toBe('Mapa mental. Archivos: b/c.ts')
 
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't1', reason: 'aborted' } as never)
   const seen = await map($)
   expect(seen.dots).toBe(1)
-  expect(seen.alt).toBe('Mapa. No hay nada en ejecución.')
+  expect(seen.alt).toBe('Mapa mental. No hay nada en ejecución.')
 })
 
 test('a command sent to the background runs past its turn until its own notification, and a failed one leaves a fault', async ($, on) => {
@@ -77,15 +78,15 @@ test('a command sent to the background runs past its turn until its own notifica
 
   await $.tool.call({ tool: 'Bash', command: 'sleep 600', description: 'Wait for the build', run_in_background: true })
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as never)
-  expect((await map($)).alt).toBe('Mapa. Terminal: Wait for the build')
+  expect((await map($)).alt).toBe('Mapa mental. Terminal: Wait for the build')
 
   // Another task's notification leaves it alone.
   await $.turn.start({ text: NOTICE('other', 'completed'), turnId: 't2' } as never)
-  expect((await map($)).alt).toBe('Mapa. Terminal: Wait for the build')
+  expect((await map($)).alt).toBe('Mapa mental. Terminal: Wait for the build')
 
   await $.turn.start({ text: NOTICE('b1', 'completed'), turnId: 't3' } as never)
   let seen = await map($)
-  expect(seen.alt).toBe('Mapa. No hay nada en ejecución.')
+  expect(seen.alt).toBe('Mapa mental. No hay nada en ejecución.')
   expect(seen.dots).toBe(0)
   // A notification is no message of the person's, and its words stay off the map.
   expect(seen.source).not.toContain('private words')
@@ -108,12 +109,12 @@ test('a background task that never reports back is closed at the end of a turn o
   await $.tool.call({ tool: 'Bash', command: 'npm run dev', description: 'Follow the log', run_in_background: true })
   now += BACKGROUND_MAX_MS - 1
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as never)
-  expect((await map($)).alt).toBe('Mapa. Terminal: Follow the log')
+  expect((await map($)).alt).toBe('Mapa mental. Terminal: Follow the log')
 
   now += 1
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' } as never)
   const seen = await map($)
-  expect(seen.alt).toBe('Mapa. No hay nada en ejecución.')
+  expect(seen.alt).toBe('Mapa mental. No hay nada en ejecución.')
   expect(seen.tone).toBe(PALETTE.done)
 })
 
@@ -130,7 +131,7 @@ test('a subagent circles the agents station until its loop ends', async ($, on) 
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer', agentId: 'a1' } as never)
   const seen = await map($)
   expect(seen.source).not.toContain('animateTransform')
-  expect(seen.alt).toBe('Mapa. No hay nada en ejecución.')
+  expect(seen.alt).toBe('Mapa mental. No hay nada en ejecución.')
 })
 
 test('a burst of calls is one redraw of the map, made once the wait is over', async ($, on) => {

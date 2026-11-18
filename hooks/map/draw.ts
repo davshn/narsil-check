@@ -36,8 +36,8 @@ export const DARK: Palette = {
   line: '#3a3f4b',
   spoke: '#2c303a',
   bone: '#ebe6dc',
-  ash: '#8a90a6',
-  dim: '#6b7280',
+  ash: '#b4b9c8',
+  dim: '#9aa0b0',
   accent: '#3b8bff',
   hot: '#8cb9ff',
   red: '#f0435a',
@@ -53,8 +53,8 @@ export const LIGHT: Palette = {
   line: '#cfd3dc',
   spoke: '#e3e6ec',
   bone: '#1f2228',
-  ash: '#5f6570',
-  dim: '#8b909a',
+  ash: '#3f444e',
+  dim: '#5b6170',
   accent: '#2f6fd6',
   hot: '#1d4fa3',
   red: '#d12f45',
@@ -77,15 +77,15 @@ export type Narsil = { light: Art; dark: Art }
 
 
 const W = 460
-const H = 430
+const H = 476
 /** Height over width of the drawing, for a surface that sizes it itself. */
 export const MAP_ASPECT = H / W
 const CX = 230
-const CY = 212
+const CY = 232
 const RX = 176
 const RY = 164
-const NODE = 22
-const CORE = 40
+const NODE = 28
+const CORE = 54
 /** Where spokes and pulses meet the core: outside the context ring. */
 const HUB = CORE + 8
 
@@ -281,8 +281,8 @@ function station(s: (typeof STATIONS)[number], i: number, { entries, board, now,
   const rim = `paint-order="stroke" stroke="${c.ground}" stroke-width="3.5" stroke-linejoin="round"`
   let over =
     `<circle cx="${x}" cy="${y}" r="${NODE}" fill="${c.raised}" stroke="${c.line}" stroke-width="1.2"/>${cooling}` +
-    `<path transform="translate(${x} ${y})" d="${s.icon}" fill="none" stroke="${glyphColor}" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>` +
-    `<text x="${x}" y="${n1(p.y + NODE + 15)}" text-anchor="middle" ${FONT} font-size="11.5" ${rim} fill="${isLit || isAlarm ? c.bone : c.ash}">${names[s.id]}</text>`
+    `<path transform="translate(${x} ${y}) scale(1.3)" d="${s.icon}" fill="none" stroke="${glyphColor}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>` +
+    `<text x="${x}" y="${n1(p.y + NODE + 18)}" text-anchor="middle" ${FONT} font-size="16" font-weight="600" ${rim} fill="${c.bone}">${names[s.id]}</text>`
 
   if (count > 0) {
     // Memory keeps two counts: what was asked for, and what a hook brought down unasked.
@@ -290,27 +290,27 @@ function station(s: (typeof STATIONS)[number], i: number, { entries, board, now,
     const asked = count - pushed
     const figures =
       pushed === 0 ? String(count) : `${asked > 0 ? `${asked} ` : ''}<tspan fill="${main}">↓${pushed}</tspan>`
-    over += `<text x="${x}" y="${n1(p.y + NODE + 28)}" text-anchor="middle" ${FONT} font-size="9.5" ${rim} fill="${c.dim}">${figures}</text>`
+    over += `<text x="${x}" y="${n1(p.y + NODE + 35)}" text-anchor="middle" ${FONT} font-size="13" ${rim} fill="${c.ash}">${figures}</text>`
   }
 
   // Top right: how many run at once. Top left: what went wrong since the last message, until the next one.
   const corner = NODE * 0.74
   if (running.length > 1) {
     over +=
-      `<circle cx="${n1(p.x + corner)}" cy="${n1(p.y - corner)}" r="8" fill="${c.raised}" stroke="${color}" stroke-width="1"/>` +
-      `<text x="${n1(p.x + corner)}" y="${n1(p.y - corner + 3)}" text-anchor="middle" ${FONT} font-size="8.5" fill="${hot}">×${running.length}</text>`
+      `<circle cx="${n1(p.x + corner)}" cy="${n1(p.y - corner)}" r="9.5" fill="${c.raised}" stroke="${color}" stroke-width="1"/>` +
+      `<text x="${n1(p.x + corner)}" y="${n1(p.y - corner + 3.5)}" text-anchor="middle" ${FONT} font-size="10" fill="${hot}">×${running.length}</text>`
   }
   const faults = board.faults?.[s.id] ?? 0
   if (faults > 0) {
     over +=
-      `<circle cx="${n1(p.x - corner)}" cy="${n1(p.y - corner)}" r="7.5" fill="${c.red}"/>` +
-      `<text x="${n1(p.x - corner)}" y="${n1(p.y - corner + 3.1)}" text-anchor="middle" ${FONT} font-size="9" font-weight="700" fill="${c.ground}">${faults > 99 ? '99+' : faults}</text>`
+      `<circle cx="${n1(p.x - corner)}" cy="${n1(p.y - corner)}" r="9" fill="${c.red}"/>` +
+      `<text x="${n1(p.x - corner)}" y="${n1(p.y - corner + 3.7)}" text-anchor="middle" ${FONT} font-size="10.5" font-weight="700" fill="${c.ground}">${faults > 99 ? '99+' : faults}</text>`
   }
   return { under, over }
 }
 
 /** How tall baby Narsil stands in the core, in the drawing's units. */
-const NARSIL_HEIGHT = 70
+const NARSIL_HEIGHT = 96
 
 /** Baby Narsil at the core: the light picture, swapped for the dark one where the surface is dark, clipped to the circle. */
 function narsilAtCore(narsil: Narsil): string {
@@ -362,7 +362,7 @@ function drawWith(board: Board, now: number, narsil: Narsil | undefined): string
   let body = ''
 
   // Contours around the core.
-  for (const [rx, ry] of [[66, 62], [104, 97], [142, 132]]) {
+  for (const [rx, ry] of [[76, 72], [110, 103], [144, 134]]) {
     body += `<ellipse cx="${CX}" cy="${CY}" rx="${rx}" ry="${ry}" fill="none" stroke="${c.line}" stroke-width=".7" opacity=".45" stroke-dasharray="2 5"/>`
   }
 
@@ -433,13 +433,15 @@ function drawWith(board: Board, now: number, narsil: Narsil | undefined): string
     `<circle cx="${CX}" cy="${CY}" r="${CORE + 6}" fill="${c.accent}" opacity=".08">` +
     `<animate attributeName="r" values="${CORE + 3};${CORE + 13};${CORE + 3}" ${breath}/>` +
     `<animate attributeName="opacity" values=".05;${anyRunning ? '.24' : '.12'};.05" ${breath}/></circle>` +
-    `<circle cx="${CX}" cy="${CY}" r="${CORE}" fill="${c.raised}" stroke="${anyRunning ? c.accent : c.line}" stroke-width="1.3"/>`
+    `<circle cx="${CX}" cy="${CY}" r="${CORE}" fill="${c.raised}" stroke="${anyRunning ? c.accent : c.line}" stroke-width="1.3"/>` +
+    // A soft blue under Narsil, so her light picture stands out on a light pane.
+    `<circle cx="${CX}" cy="${CY}" r="${CORE - 1}" fill="${c.accent}" opacity=".14"/>`
 
   // Baby Narsil stands in the core; without the pictures, her name does.
   body +=
     narsil !== undefined
       ? narsilAtCore(narsil)
-      : `<text x="${CX}" y="${CY + 5}" text-anchor="middle" ${FONT} font-size="13" letter-spacing="1.9" fill="${c.bone}">NARSIL</text>`
+      : `<text x="${CX}" y="${CY + 5}" text-anchor="middle" ${FONT} font-size="16" letter-spacing="2.4" fill="${c.bone}">NARSIL</text>`
 
   // The context window as a ring around the core: it fills as the session goes and empties at a compaction.
   const full = board.context === undefined ? undefined : Math.max(0, Math.min(100, Math.round(board.context)))
@@ -456,7 +458,7 @@ function drawWith(board: Board, now: number, narsil: Narsil | undefined): string
   const figures = [board.model === undefined ? '' : escapeXml(shortModel(board.model)), full === undefined ? '' : `${full}%`].filter(Boolean).join(' · ')
   if (figures !== '') {
     const rim = `paint-order="stroke" stroke="${c.ground}" stroke-width="3.5" stroke-linejoin="round"`
-    body += `<text x="${CX}" y="${CY + CORE + 18}" text-anchor="middle" ${FONT} font-size="9.5" ${rim} fill="${isSwitching ? c.hot : c.ash}">${figures}</text>`
+    body += `<text x="${CX}" y="${CY + CORE + 22}" text-anchor="middle" ${FONT} font-size="13" ${rim} fill="${isSwitching ? c.hot : c.ash}">${figures}</text>`
   }
 
   // A changed model rings at the core and at its station for a few seconds.

@@ -241,7 +241,7 @@ test("the CI fold, under Remote Control, shows the PR's run step by step and fol
   const clock = await opened($, on)
 
   let pane = await shown($, /CI · 2\/4/)
-  expect(pane.buttons.slice(0, 7)).toEqual(['▾ Mapa', '▾ Entorno', 'E:\\Proyectos\\app', 'feat/login', 'desactivado', '▾ CI · 2/4 · Typecheck', 'desactivado'])
+  expect(pane.buttons.slice(0, 7)).toEqual(['▾ Mapa mental', '▾ Entorno', 'E:\\Proyectos\\app', 'feat/login', 'desactivado', '▾ CI · 2/4 · Typecheck', 'desactivado'])
   expect(pane.texts.filter(t => /^ {2}[✓◐○✗–] /.test(t))).toEqual(['  ✓ Checkout', '  ✓ Lint', '  ◐ Typecheck', '  ○ Build'])
   expect(calls.filter(c => c.tool === 'get_status').length).toBe(1)
 
@@ -406,7 +406,7 @@ test('the pane opens with the map, then the session: Entorno unfolded, then Cone
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const buttons = (await ui.findAll({ type: 'Button' })).map(b => b.text)
-  expect(buttons.slice(0, 7)).toEqual(['▾ Mapa', '▾ Entorno', 'E:\\Proyectos\\app', 'feat/login', 'desactivado', '▸ Conectores · 2', '▸ Actualizaciones'])
+  expect(buttons.slice(0, 7)).toEqual(['▾ Mapa mental', '▾ Entorno', 'E:\\Proyectos\\app', 'feat/login', 'desactivado', '▸ Conectores · 2', '▸ Actualizaciones'])
 
   // No environment line: the repository, folder, branch and Remote Control.
   expect(await ui.find({ type: 'Text', text: /Local/ })).toBeUndefined()

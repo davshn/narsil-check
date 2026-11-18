@@ -106,9 +106,9 @@ test('the work map is the first section, open, with baby Narsil at its core; the
   // Mapa comes before every other section.
   const sections = (await ui.findAll({ type: 'Button' })).map(b => b.props.key).filter(k => typeof k === 'string' && k.startsWith('section-'))
   expect(sections[0]).toBe('section-map')
-  expect((await ui.find({ type: 'Button', key: 'section-map' }))?.text).toBe('▾ Mapa')
+  expect((await ui.find({ type: 'Button', key: 'section-map' }))?.text).toBe('▾ Mapa mental')
   const map = (await ui.findAll({ type: 'Svg' }))[0]
-  expect(map?.props.alt).toBe('Mapa. No hay nada en ejecución.')
+  expect(map?.props.alt).toBe('Mapa mental. No hay nada en ejecución.')
   const source = String(map?.props.source)
   expect(source).toContain(PARADA_CLARO.src)
   expect(source).toContain(PARADA_OSCURO.src)
@@ -119,7 +119,7 @@ test('the work map is the first section, open, with baby Narsil at its core; the
 
   // Folded, the section keeps its head and draws no map.
   await ui.press({ key: 'section-map' })
-  expect((await ui.find({ type: 'Button', key: 'section-map' }))?.text).toBe('▸ Mapa')
+  expect((await ui.find({ type: 'Button', key: 'section-map' }))?.text).toBe('▸ Mapa mental')
   expect((await ui.findAll({ type: 'Svg' })).map(s => s.props.alt)).toEqual(['Salud del proyecto'])
   await ui.unmount()
 
@@ -143,14 +143,14 @@ test('a tool call lights its station on the map, named in the map\'s words for a
   // The reader hears what runs, by its station and its name only.
   const reading = $.tool.call({ tool: 'Read', file_path: '/a/b/content.py' })
   let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.findAll({ type: 'Svg' }))[0]?.props.alt).toBe('Mapa. Archivos: b/content.py')
+  expect((await ui.findAll({ type: 'Svg' }))[0]?.props.alt).toBe('Mapa mental. Archivos: b/content.py')
   expect(String((await ui.findAll({ type: 'Svg' }))[0]?.props.source)).toContain('>Archivos</text>')
   await ui.unmount()
 
   release()
   await reading
   ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.findAll({ type: 'Svg' }))[0]?.props.alt).toBe('Mapa. No hay nada en ejecución.')
+  expect((await ui.findAll({ type: 'Svg' }))[0]?.props.alt).toBe('Mapa mental. No hay nada en ejecución.')
   await ui.unmount()
 })
 
@@ -232,7 +232,7 @@ test('each section is a panel bordered in the color of its state; the desktop ti
   expect((await ui.find({ type: 'Box', key: 'panel-upgrade' }))?.props).toMatchObject({ borderStyle: 'round', borderColor: PALETTE.done })
   expect((await ui.find({ type: 'Box', key: 'panel-todos' }))?.props.borderColor).toBe(PALETTE.muted)
   const svgs = await ui.findAll({ type: 'Svg' })
-  expect(svgs.map(s => s.props.alt)).toEqual(['Mapa. No hay nada en ejecución.', 'Salud del proyecto'])
+  expect(svgs.map(s => s.props.alt)).toEqual(['Mapa mental. No hay nada en ejecución.', 'Salud del proyecto'])
   // Nothing has run: the map's panel is green, as a section with nothing waiting.
   expect((await ui.find({ type: 'Box', key: 'panel-map' }))?.props.borderColor).toBe(PALETTE.done)
   expect((await ui.find({ type: 'Box', key: 'chip-trivial' }))?.props.backgroundColor).toBe(`${PALETTE.done}1F`)

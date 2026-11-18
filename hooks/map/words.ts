@@ -4,7 +4,7 @@ import type { MapBoard, StationId } from '../../types'
 import { PALETTE } from '../words'
 
 export const WORDS = {
-  section: 'Mapa',
+  section: 'Mapa mental',
   stations: {
     you: 'Tú',
     model: 'Modelo',
