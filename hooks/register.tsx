@@ -66,10 +66,10 @@ import { CI_POLL_MS, CI_WAIT_POLLS, ciLabel, ciMark, isGoing, jobsOf, latestRuns
 import { TODO_FILE, TOOL_ADD, TOOL_DONE, TOOL_LIST, TOOL_TEMPLATE, damagedPath, findTask, newTask, parseEntry, parseTodoFile, serializeTodos, templateArg, templateMatches, templatePrompt, todosColor, todosLabel, todosText, withExclude } from './todos'
 import { COMMAND, COMMAND_HELP, GROUPS, HEALTH_SIZE, PALETTE, PANE, TITLE, agoLabel, auditSummary, behindNote, commandHelp, groupLabel, healthOf, healthSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, skippedNote, sortUpgrades, summaryOf, tail } from './words'
 import type { SkippedEcosystem } from './words'
-import { PARADA_CLARO, PARADA_OSCURO } from './narsil-art'
 import { readBoard } from './map/board'
 import { describeMap, drawMap } from './map/draw'
 import { mapToolCall, mapTurnComplete, mapTurnStart, registerMap, resetMap } from './map/hooks'
+import { narsilFor } from './map/narsil'
 import { mapLabel, mapTone } from './map/words'
 
 // Change a tag when its type's fields change: it declines what an earlier
@@ -1595,7 +1595,7 @@ export const register: Register = on => {
           </Box>
           {mapOpen ? (
             <Box key="map" flexDirection="row" justifyContent="center">
-              <Svg source={drawMap(board, now, { light: PARADA_CLARO, dark: PARADA_OSCURO })} alt={describeMap(board)} />
+              <Svg source={drawMap(board, now, narsilFor(board))} alt={describeMap(board)} />
             </Box>
           ) : null}
         </Box>

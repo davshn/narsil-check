@@ -3,8 +3,10 @@ import { expect, test } from 'claude-code/testing'
 import { classify, clean, firstLine, memoryIds, shortModel } from '../hooks/map/classify'
 import { SVG_LIMIT, describeMap, drawMap } from '../hooks/map/draw'
 import { SETUP, STATIONS } from '../hooks/map/stations'
+import { narsilFor } from '../hooks/map/narsil'
 import { WORDS, mapLabel, mapTone } from '../hooks/map/words'
-import { PARADA_CLARO, PARADA_OSCURO } from '../hooks/narsil-art'
+import { ANIMADA_PARADA_CLARO, ANIMADA_PARADA_OSCURO, ANIMADA_TRABAJANDO_CLARO, ANIMADA_TRABAJANDO_OSCURO } from '../hooks/narsil-anim'
+import { PARADA_CLARO, PARADA_OSCURO, TRABAJANDO_CLARO, TRABAJANDO_OSCURO } from '../hooks/narsil-art'
 import { PALETTE } from '../hooks/words'
 import type { MapBoard } from '../types'
 
@@ -33,7 +35,7 @@ const fullest: MapBoard = {
 }
 
 test('the map at its fullest, with baby Narsil, stays within what Svg accepts', () => {
-  const svg = drawMap(fullest, NOW, NARSIL)
+  const svg = drawMap(fullest, NOW, [NARSIL])
   expect(svg.length).toBeLessThanOrEqual(SVG_LIMIT)
   expect(svg).toContain(PARADA_CLARO.src)
   expect(svg).toContain(PARADA_OSCURO.src)
@@ -52,10 +54,53 @@ test('the map at its fullest, with baby Narsil, stays within what Svg accepts', 
 
 test('pictures too big for Svg leave the map whole, with her name at the core', () => {
   const huge = { src: `data:image/png;base64,${'A'.repeat(SVG_LIMIT)}`, width: 90, height: 150 }
-  const svg = drawMap({ entries: [], counts: {} }, NOW, { light: huge, dark: huge })
+  const svg = drawMap({ entries: [], counts: {} }, NOW, [{ light: huge, dark: huge }])
   expect(svg.length).toBeLessThanOrEqual(SVG_LIMIT)
   expect(svg).toContain('>NARSIL</text>')
   expect(svg).not.toContain('<image')
+})
+
+test('with nothing running, baby Narsil sleeps at the core in her animated loop', () => {
+  const idle: MapBoard = {
+    entries: [{ id: '1', station: 'files', label: 'leer', from: 'core', startedAt: NOW - 5000, endedAt: NOW - 4000, status: 'ok' }],
+    counts: {},
+  }
+  const svg = drawMap(idle, NOW, narsilFor(idle))
+  expect(svg.length).toBeLessThanOrEqual(SVG_LIMIT)
+  expect(svg).toContain(ANIMADA_PARADA_CLARO.src)
+  expect(svg).toContain(ANIMADA_PARADA_OSCURO.src)
+  expect(svg).not.toContain(ANIMADA_TRABAJANDO_CLARO.src)
+  expect(svg).not.toContain(TRABAJANDO_CLARO.src)
+})
+
+test('while work runs, baby Narsil is awake at the core in her animated loop', () => {
+  const working: MapBoard = {
+    entries: [{ id: '1', station: 'shell', label: 'npm test', from: 'core', startedAt: NOW - 100, status: 'run' }],
+    counts: {},
+  }
+  const svg = drawMap(working, NOW, narsilFor(working))
+  expect(svg.length).toBeLessThanOrEqual(SVG_LIMIT)
+  expect(svg).toContain(ANIMADA_TRABAJANDO_CLARO.src)
+  expect(svg).toContain(ANIMADA_TRABAJANDO_OSCURO.src)
+  expect(svg).not.toContain(ANIMADA_PARADA_CLARO.src)
+  expect(svg).not.toContain(PARADA_CLARO.src)
+})
+
+test('when her loop would not fit, the core takes the next picture of her that does', () => {
+  const loop = { src: `data:image/webp;base64,${'L'.repeat(SVG_LIMIT)}`, width: 90, height: 128 }
+  const still = { src: 'data:image/png;base64,STILL', width: 90, height: 150 }
+  const svg = drawMap({ entries: [], counts: {} }, NOW, [{ light: loop, dark: loop }, { light: still, dark: still }])
+  expect(svg.length).toBeLessThanOrEqual(SVG_LIMIT)
+  expect(svg).not.toContain('LLLL')
+  expect(svg).toContain(still.src)
+  expect(svg).not.toContain('>NARSIL</text>')
+})
+
+test('awake at the map at its fullest, the drawing still stays within what Svg accepts', () => {
+  const svg = drawMap(fullest, NOW, narsilFor(fullest))
+  expect(svg.length).toBeLessThanOrEqual(SVG_LIMIT)
+  expect(svg).not.toContain(PARADA_CLARO.src)
+  expect(svg).not.toContain(ANIMADA_PARADA_CLARO.src)
 })
 
 test('the section reads its state: its toggle, its color and what a reader hears', () => {
