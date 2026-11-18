@@ -5,6 +5,10 @@
   <img src="https://raw.githubusercontent.com/davshn/narsil-pet/main/assets/readme/searching-oscuro.svg" width="150" alt="Narsil revisando el proyecto (modo oscuro)">
 </p>
 
+> **Narsil Workshop · [narsil.davshn.tech](https://narsil.davshn.tech)**
+>
+> Un taller gratuito, en español, inglés, italiano, francés y portugués de Brasil, que enseña paso a paso a construir mods de Claude Code como [Narsil](https://github.com/davshn/narsil-pet) y Narsil Check, y a montar un bot de escritorio de Narsil con cuerpo: una pantalla táctil ESP32-P4 en la barriga y una cabeza holográfica ESP32-S3, que habla con Xiaozhi y Claude desde tu propio servidor y muestra tus pull requests de GitHub y el estado de Narsil. Sin registro, sin analítica, y nunca te pide tokens ni claves.
+
 Narsil Check es el compañero de [Narsil](https://github.com/davshn/narsil-pet): un panel lateral, con sus mismos colores, que revisa el proyecto en el que trabajas. Muestra el entorno de la sesión (repositorio, carpeta, rama, conectores, control remoto y Auto-fix), qué librerías se pueden actualizar y cuánto cuesta hacerlo, qué vulnerabilidades conocidas tienen los paquetes instalados y una lista de tareas pendientes del proyecto. Con él puedes ocultar la barra de sesión de la app de escritorio y quedarte con un solo panel.
 
 Lee proyectos de JavaScript y TypeScript (npm y Expo), Python (PyPI), Go, Rust (Cargo), Dart o Flutter (Pub), Kotlin y Java (Gradle y Maven), C# (NuGet), Ruby (RubyGems) y Swift (SwiftPM).
