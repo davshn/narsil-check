@@ -3,7 +3,7 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { GROUPS, HEALTH_SIZE, PALETTE, commandHelp, healthOf, healthSvg, sectionColor, sectionLabel } from '../hooks/words'
-import { PARADA_CLARO, PARADA_OSCURO } from '../hooks/narsil-art'
+import { ANIMADA_PARADA_CLARO, ANIMADA_PARADA_OSCURO } from '../hooks/narsil-anim'
 import { OLD } from './released'
 
 declare function setTimeout(fn: () => void, ms: number): unknown
@@ -110,8 +110,9 @@ test('the work map is the first section, open, with baby Narsil at its core; the
   const map = (await ui.findAll({ type: 'Svg' }))[0]
   expect(map?.props.alt).toBe('Mapa mental. No hay nada en ejecución.')
   const source = String(map?.props.source)
-  expect(source).toContain(PARADA_CLARO.src)
-  expect(source).toContain(PARADA_OSCURO.src)
+  // Nothing runs yet: she sleeps.
+  expect(source).toContain(ANIMADA_PARADA_CLARO.src)
+  expect(source).toContain(ANIMADA_PARADA_OSCURO.src)
   // The dark Narsil shows only under a dark color scheme, and the map is animated.
   expect(source).toContain('@media (prefers-color-scheme: dark){.claro{display:none}.oscuro{display:inline}}')
   expect(source).toContain('<animate')

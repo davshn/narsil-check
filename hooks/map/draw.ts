@@ -329,12 +329,15 @@ function narsilAtCore(narsil: Narsil): string {
 }
 
 /**
- * The board as one SVG, baby Narsil at its core. When the pictures would take the drawing past what the Svg
- * element accepts, the core says NARSIL instead: the map always shows.
+ * The board as one SVG, baby Narsil at its core: the first of her pictures that keeps the drawing within what the
+ * Svg element accepts. When none does, the core says NARSIL instead: the map always shows.
  */
-export function drawMap(board: Board, now: number, narsil?: Narsil): string {
-  const drawn = drawWith(board, now, narsil)
-  return drawn.length <= SVG_LIMIT || narsil === undefined ? drawn : drawWith(board, now, undefined)
+export function drawMap(board: Board, now: number, narsil: readonly Narsil[] = []): string {
+  for (const art of narsil) {
+    const drawn = drawWith(board, now, art)
+    if (drawn.length <= SVG_LIMIT) return drawn
+  }
+  return drawWith(board, now, undefined)
 }
 
 /** What the map says to a reader that cannot see it: what runs now and how full the context is. */
