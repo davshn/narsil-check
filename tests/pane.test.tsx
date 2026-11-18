@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { GROUPS, HEALTH_SIZE, NARSIL_SIZE, PALETTE, commandHelp, healthOf, healthSvg, sectionColor, sectionLabel } from '../hooks/words'
+import { GROUPS, HEALTH_SIZE, PALETTE, commandHelp, healthOf, healthSvg, sectionColor, sectionLabel } from '../hooks/words'
 import { PARADA_CLARO, PARADA_OSCURO } from '../hooks/narsil-art'
 import { OLD } from './released'
 
@@ -93,32 +93,64 @@ async function scanned($: Engine) {
 
 const TYPED = { origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } } as const
 
-test('baby Narsil stands under the title, light or dark as the app is; the terminal draws no picture', async ($, on) => {
+test('the work map is the first section, open, with baby Narsil at its core; the terminal draws neither', async ($, on) => {
   project(on)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await scanned($)
 
   let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const picture = await ui.find({ type: 'Svg' })
-  expect(picture?.props.alt).toBe('Narsil bebé')
-  // As tall as Narsil stands in her own band, never stretched to the pane.
-  expect(picture?.props.height).toBe(NARSIL_SIZE.height)
-  expect(picture?.props.width).toBe(NARSIL_SIZE.width)
-  expect(NARSIL_SIZE.height).toBe(100)
-  // The title and the picture are centered across the pane; the title has no subtitle.
+  // The title stays centered and alone; baby Narsil no longer stands under it.
   expect((await ui.find({ type: 'Box', key: 'head' }))?.props.justifyContent).toBe('center')
-  expect((await ui.find({ type: 'Box', key: 'narsil' }))?.props.justifyContent).toBe('center')
+  expect(await ui.find({ type: 'Box', key: 'narsil' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /revisiones del proyecto/ })).toBeUndefined()
-  const source = String(picture?.props.source)
+  // Mapa comes before every other section.
+  const sections = (await ui.findAll({ type: 'Button' })).map(b => b.props.key).filter(k => typeof k === 'string' && k.startsWith('section-'))
+  expect(sections[0]).toBe('section-map')
+  expect((await ui.find({ type: 'Button', key: 'section-map' }))?.text).toBe('▾ Mapa mental')
+  const map = (await ui.findAll({ type: 'Svg' }))[0]
+  expect(map?.props.alt).toBe('Mapa mental. No hay nada en ejecución.')
+  const source = String(map?.props.source)
   expect(source).toContain(PARADA_CLARO.src)
   expect(source).toContain(PARADA_OSCURO.src)
-  // The dark one shows only under a dark color scheme.
+  // The dark Narsil shows only under a dark color scheme, and the map is animated.
   expect(source).toContain('@media (prefers-color-scheme: dark){.claro{display:none}.oscuro{display:inline}}')
+  expect(source).toContain('<animate')
+  expect(source.length).toBeLessThanOrEqual(131072)
+
+  // Folded, the section keeps its head and draws no map.
+  await ui.press({ key: 'section-map' })
+  expect((await ui.find({ type: 'Button', key: 'section-map' }))?.text).toBe('▸ Mapa mental')
+  expect((await ui.findAll({ type: 'Svg' })).map(s => s.props.alt)).toEqual(['Salud del proyecto'])
   await ui.unmount()
 
   ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  expect(await ui.find({ type: 'Button', key: 'section-map' })).toBeUndefined()
   expect((await ui.find({ type: 'Text', text: /Narsil Check/ }))?.text).toBe('● Narsil Check')
+  await ui.unmount()
+})
+
+test('a tool call lights its station on the map, named in the map\'s words for a reader', async ($, on) => {
+  project(on)
+  let clock = 1_000_000
+  on('clock.now', () => ({ value: clock++ }))
+  // A Read answers only when released: until then it is a call still running.
+  let release = () => {}
+  on('tool.call', (_, e) => (e.tool === 'Read' ? new Promise(resolve => (release = () => resolve({ result: {} }))) : { result: {} }))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await scanned($)
+
+  // The reader hears what runs, by its station and its name only.
+  const reading = $.tool.call({ tool: 'Read', file_path: '/a/b/content.py' })
+  let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.findAll({ type: 'Svg' }))[0]?.props.alt).toBe('Mapa mental. Archivos: b/content.py')
+  expect(String((await ui.findAll({ type: 'Svg' }))[0]?.props.source)).toContain('>Archivos</text>')
+  await ui.unmount()
+
+  release()
+  await reading
+  ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.findAll({ type: 'Svg' }))[0]?.props.alt).toBe('Mapa mental. No hay nada en ejecución.')
   await ui.unmount()
 })
 
@@ -200,7 +232,9 @@ test('each section is a panel bordered in the color of its state; the desktop ti
   expect((await ui.find({ type: 'Box', key: 'panel-upgrade' }))?.props).toMatchObject({ borderStyle: 'round', borderColor: PALETTE.done })
   expect((await ui.find({ type: 'Box', key: 'panel-todos' }))?.props.borderColor).toBe(PALETTE.muted)
   const svgs = await ui.findAll({ type: 'Svg' })
-  expect(svgs.map(s => s.props.alt)).toEqual(['Narsil bebé', 'Salud del proyecto'])
+  expect(svgs.map(s => s.props.alt)).toEqual(['Mapa mental. No hay nada en ejecución.', 'Salud del proyecto'])
+  // Nothing has run: the map's panel is green, as a section with nothing waiting.
+  expect((await ui.find({ type: 'Box', key: 'panel-map' }))?.props.borderColor).toBe(PALETTE.done)
   expect((await ui.find({ type: 'Box', key: 'chip-trivial' }))?.props.backgroundColor).toBe(`${PALETTE.done}1F`)
   expect((await ui.find({ type: 'Box', key: 'row-upgrade-npm:zod' }))?.props.paddingX).toBe(1)
   await ui.unmount()
