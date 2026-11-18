@@ -1,8 +1,8 @@
 # Narsil Check
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/davshn/narsil-pet/main/assets/readme/searching-claro.svg" width="150" alt="Narsil revisando el proyecto (modo claro)">
-  <img src="https://raw.githubusercontent.com/davshn/narsil-pet/main/assets/readme/searching-oscuro.svg" width="150" alt="Narsil revisando el proyecto (modo oscuro)">
+  <img src="assets/readme/searching-claro.svg" width="150" alt="Narsil revisando el proyecto (modo claro)">
+  <img src="assets/readme/searching-oscuro.svg" width="150" alt="Narsil revisando el proyecto (modo oscuro)">
 </p>
 
 > **Narsil Workshop · [narsil.davshn.tech](https://narsil.davshn.tech)**
