@@ -1,128 +1,130 @@
 # Narsil Check
 
 <p align="center">
-  <img src="assets/readme/searching-claro.svg" width="150" alt="Narsil revisando el proyecto (modo claro)">
-  <img src="assets/readme/searching-oscuro.svg" width="150" alt="Narsil revisando el proyecto (modo oscuro)">
+  <img src="assets/readme/searching-claro.svg" width="150" alt="Narsil checking the project (light mode)">
+  <img src="assets/readme/searching-oscuro.svg" width="150" alt="Narsil checking the project (dark mode)">
 </p>
 
 > **Narsil Workshop · [narsil.davshn.tech](https://narsil.davshn.tech)**
 >
-> Un taller gratuito, en español, inglés, italiano, francés y portugués de Brasil, que enseña paso a paso a construir mods de Claude Code como [Narsil](https://github.com/davshn/narsil-pet) y Narsil Check, y a montar un bot de escritorio de Narsil con cuerpo: una pantalla táctil ESP32-P4 en la barriga y una cabeza holográfica ESP32-S3, que habla con Xiaozhi y Claude desde tu propio servidor y muestra tus pull requests de GitHub y el estado de Narsil. Sin registro, sin analítica, y nunca te pide tokens ni claves.
+> A free workshop, in English, Spanish, Italian, French, and Brazilian Portuguese, that teaches step by step how to build Claude Code mods like [Narsil](https://github.com/davshn/narsil-pet) and Narsil Check, and how to build a Narsil desk bot with a body: an ESP32-P4 touch screen in the belly and a holographic ESP32-S3 head, which talks through Xiaozhi and Claude on your own server and shows your GitHub pull requests and the Narsil status. No sign-up, no analytics, and it never asks for tokens or keys.
 
-Narsil Check es el compañero de [Narsil](https://github.com/davshn/narsil-pet): un panel lateral, con sus mismos colores, que revisa el proyecto en el que trabajas. Muestra un mapa animado de lo que Claude está haciendo, el entorno de la sesión (repositorio, carpeta, rama, conectores, control remoto y Auto-fix), qué librerías se pueden actualizar y cuánto cuesta hacerlo, qué vulnerabilidades conocidas tienen los paquetes instalados y una lista de tareas pendientes del proyecto. Con él puedes ocultar la barra de sesión de la app de escritorio y quedarte con un solo panel.
+Narsil Check is the companion of [Narsil](https://github.com/davshn/narsil-pet): a side pane, in her same colors, that checks the project you are working on. It shows an animated map of what Claude is doing, the session environment (repository, folder, branch, connectors, remote control, and Auto-fix), which libraries can be upgraded and how much effort it takes, which known vulnerabilities the installed packages have, and a list of the project's pending tasks. With it you can hide the desktop app's session bar and keep a single pane.
 
-Lee proyectos de JavaScript y TypeScript (npm y Expo), Python (PyPI), Go, Rust (Cargo), Dart o Flutter (Pub), Kotlin y Java (Gradle y Maven), C# (NuGet), Ruby (RubyGems) y Swift (SwiftPM).
+It reads JavaScript and TypeScript (npm and Expo), Python (PyPI), Go, Rust (Cargo), Dart or Flutter (Pub), Kotlin and Java (Gradle and Maven), C# (NuGet), Ruby (RubyGems), and Swift (SwiftPM) projects.
 
-Es un mod de Claude Code de **código abierto**, publicado bajo la licencia [GPL v3](#licencia).
+It is an **open source** Claude Code mod, released under the [GPL v3](#license) license.
 
-## Índice
+> **Language note:** the pane's labels and messages are in Spanish. This README keeps them as they appear on screen, with their English meaning next to them the first time they show up.
 
-- [Funcionalidades](#funcionalidades)
-- [Ecosistemas](#ecosistemas)
-- [Instalación](#instalación)
-- [Comandos](#comandos)
-- [Sistemas compatibles](#sistemas-compatibles)
-- [Desarrollo](#desarrollo)
-- [Licencia](#licencia)
+## Contents
 
-## Funcionalidades
+- [Features](#features)
+- [Ecosystems](#ecosystems)
+- [Installation](#installation)
+- [Commands](#commands)
+- [Supported systems](#supported-systems)
+- [Development](#development)
+- [License](#license)
 
-### El panel
-El panel se abre al empezar cada sesión, aunque no haya nada que revisar. Arriba, centrado, está el título **● Narsil Check**, y después cada revisión como una sección que se pliega y se despliega con su cabecera (`▾ Actualizaciones · 3` / `▸ Actualizaciones · 3`). El punto de color de cada sección dice lo más urgente que tiene, con la paleta de Narsil: rojo si algo bloquea o falla, amarillo si algo te espera, verde si está al día y azul para lo informativo.
+## Features
 
-Cada sesión empieza igual: **Mapa mental** y **Entorno** desplegados, **Conectores** plegado, y **Actualizaciones**, **Vulnerabilidades** y **Pendientes** plegadas hasta que tienen algo, momento en que se despliegan solas.
+### The pane
+The pane opens when each session starts, even if there is nothing to check. At the top, centered, is the title **● Narsil Check**, and then each check as a section that collapses and expands with its header (`▾ Actualizaciones · 3` / `▸ Actualizaciones · 3`). Each section's colored dot shows the most urgent thing in it, with Narsil's palette: red if something is blocking or failing, yellow if something is waiting for you, green if it is up to date, and blue for information.
 
-Dentro de **Actualizaciones** y **Vulnerabilidades**, cada grupo (**Bloqueada**, **Versión mayor**, **Crítica**, **Alta**...) también se pliega con su propia cabecera (`▾ Bloqueada (2)` / `▸ Bloqueada (2)`), y el panel recuerda cuáles cerraste. Un clic en una librería o en una vulnerabilidad la copia al portapapeles: la librería con su salto y lo que la bloquea o la razón de Haiku, y la vulnerabilidad con su gravedad, el arreglo y el enlace a OSV.
+Every session starts the same way: **Mapa mental** (work map) and **Entorno** (environment) expanded, **Conectores** (connectors) collapsed, and **Actualizaciones** (upgrades), **Vulnerabilidades** (vulnerabilities), and **Pendientes** (pending tasks) collapsed until they have something, at which point they expand on their own.
 
-Al final del panel, **Actualizar rama** hace `git pull -r` en la rama en la que estás: trae lo nuevo de la remota y vuelve a poner encima tus commits locales. Si git no puede hacerlo (un conflicto o cambios sin commit), lo dice y muestra el motivo. Lo ejecuta el mod directamente, sin pasar por los permisos de la app, y después vuelve a revisar las librerías.
+Inside **Actualizaciones** and **Vulnerabilidades**, each group (**Bloqueada** (blocked), **Versión mayor** (major version), **Crítica** (critical), **Alta** (high)...) also collapses with its own header (`▾ Bloqueada (2)` / `▸ Bloqueada (2)`), and the pane remembers which ones you closed. A click on a library or a vulnerability copies it to the clipboard: the library with its jump and what blocks it or Haiku's reasoning, and the vulnerability with its severity, the fix, and the OSV link.
 
-Cada revisión de librerías (al abrir la sesión, con **Revisar de nuevo** o con `/narsil-check upgrade`) también hace `git fetch` y cuenta los commits que la remota de tu rama tiene y tú no. Si te falta alguno, arriba del todo aparece un aviso rojo, *"⚠ La rama feat/login está 3 commits detrás de su remota: actualízala antes de seguir."*, con su propio botón **Actualizar rama**. Sin rama remota, sin red o con `HEAD` separado no se muestra nada. Tras un pull correcto se revisa de nuevo y el aviso desaparece.
+At the bottom of the pane, **Actualizar rama** (update branch) runs `git pull -r` on your current branch: it brings in what is new on the remote and puts your local commits back on top. If git cannot do it (a conflict or uncommitted changes), it says so and shows the reason. The mod runs it directly, without going through the app's permissions, and then checks the libraries again.
 
-### Mapa mental
-La primera sección, **Mapa mental**, es un mapa animado del trabajo de Claude en la sesión, con Narsil bebé en el centro (en su versión clara u oscura, según el tema de la app). Alrededor hay diez estaciones: **Tú**, **Modelo**, **Memoria**, **Archivos**, **Terminal**, **Red**, **Navegador**, **Agentes**, **Skills** y **Hooks**. Cada llamada a una herramienta sale de Narsil como un pulso hacia su estación, que se enciende mientras trabaja y muestra cuántas veces se usó.
+Each library check (when the session opens, with **Revisar de nuevo** (check again), or with `/narsil-check upgrade`) also runs `git fetch` and counts the commits your branch's remote has and you do not. If you are missing any, a red warning appears at the very top, *"⚠ La rama feat/login está 3 commits detrás de su remota: actualízala antes de seguir."* (*the branch feat/login is 3 commits behind its remote: update it before continuing*), with its own **Actualizar rama** button. With no remote branch, no network, or a detached `HEAD`, nothing is shown. After a successful pull it checks again and the warning goes away.
 
-- **Los radios** se engrosan con el uso, y **la ruta** une las últimas estaciones visitadas y se desvanece con el tiempo.
-- **Dos manecillas** alrededor de una estación dicen cuánto lleva una llamada larga.
-- **Un punto rojo** marca un error o un rechazo de un hook, hasta tu siguiente mensaje.
-- **Un anillo** alrededor de Narsil dice cuánto contexto queda: ámbar al 70 % y rojo al 90 %. Debajo aparecen el modelo y el porcentaje.
-- **Los subagentes** que siguen trabajando giran alrededor de **Agentes**.
-- **Una tarea en segundo plano** (un comando, un monitor o un agente lanzado aparte) sigue encendida hasta que avisa de que terminó. Si en una hora no avisa, se da por cerrada al final del turno.
+### Work map
+The first section, **Mapa mental**, is an animated map of Claude's work in the session, with baby Narsil in the center (in her light or dark version, depending on the app theme). Around her are ten stations: **Tú** (you), **Modelo** (model), **Memoria** (memory), **Archivos** (files), **Terminal**, **Red** (network), **Navegador** (browser), **Agentes** (agents), **Skills**, and **Hooks**. Each tool call leaves Narsil as a pulse toward its station, which lights up while it works and shows how many times it was used.
 
-El mapa nunca hace esperar a una herramienta: anota cada llamada a la vez que se ejecuta. El panel lo redibuja como mucho cada 400 ms, así que una ráfaga de llamadas es un solo redibujado.
+- **The spokes** thicken with use, and **the route** joins the last stations visited and fades over time.
+- **Two clock hands** around a station show how long a long call has been running.
+- **A red dot** marks an error or a hook rejection, until your next message.
+- **A ring** around Narsil shows how much context is left: amber at 70 % and red at 90 %. The model and the percentage appear below.
+- **Subagents** that are still working orbit **Agentes**.
+- **A background task** (a command, a monitor, or an agent launched separately) stays lit until it reports that it finished. If it does not report within an hour, it is considered closed at the end of the turn.
 
-El punto de la sección es azul mientras algo trabaja, rojo si algo falló y verde en reposo. El mapa solo usa nombres: de un archivo, las dos últimas partes de la ruta; de una web, el dominio; de un comando, su descripción o su nombre. Nunca muestra lo que se escribe, se busca o se guarda en memoria. La terminal no dibuja imágenes, así que allí la sección no aparece.
+The map never makes a tool wait: it records each call while it runs. The pane redraws it at most every 400 ms, so a burst of calls is a single redraw.
 
-El mapa viene de [lot-map](https://github.com/alexeyw/lot-map), de Aleksei Volodin (licencia MIT), adaptado a los colores de Narsil.
+The section's dot is blue while something is working, red if something failed, and green at rest. The map only uses names: for a file, the last two parts of the path; for a website, the domain; for a command, its description or its name. It never shows what is written, searched, or saved to memory. The terminal does not draw images, so the section does not appear there.
 
-### Entorno
-Lo que enseña la barra de sesión de la app de escritorio, para que puedas ocultarla:
+The map comes from [lot-map](https://github.com/alexeyw/lot-map), by Aleksei Volodin (MIT license), adapted to Narsil's colors.
 
-| Fila | Qué muestra | Al hacer clic |
+### Environment
+What the desktop app's session bar shows, so you can hide it:
+
+| Row | What it shows | On click |
 | --- | --- | --- |
-| **Repositorio** | La dirección web del remoto `origin` (`github.com/davshn/narsil-check`), sea SSH o HTTPS. | La abre en el navegador. |
-| **Carpeta** | La carpeta de trabajo de la sesión. | Abre el selector de carpetas y mueve la sesión a la que elijas. |
-| **Rama** | La rama de git actual. | Abre una pestaña de terminal en la carpeta de trabajo. |
-| **Control remoto** | Un interruptor: `●━━ desactivado` en gris, `━━● activado` en verde. | Lo activa o lo desactiva. |
-| **CI** | Solo con un PR abierto: los pasos de GitHub Actions del último commit de su rama (`✓ Lint`, `◐ Typecheck`, `○ Build`, `✗` si falló), sin los pasos internos de GitHub (`Set up job`, `Post …`). La línea resume el avance: `CI · 2/4 · Typecheck`, `CI · pasó`, `CI · falló`, o `esperando el CI del último push` si la rama tiene un commit que ningún run tomó todavía. Mientras corre, se vuelve a leer cada 10 segundos con `gh` y se deja de leer al terminar. | Pliega o despliega los pasos; queda como lo dejaste. |
-| **Auto-fix** | Un interruptor igual para el PR abierto de la sesión: con él activado, la app despierta a Claude cuando falla el CI, hay un conflicto o llega un comentario de revisión. Sin PR abierto dice `sin PR abierto`. | Lo activa o lo desactiva; la app puede pedirte permiso antes. |
+| **Repositorio** (repository) | The web address of the `origin` remote (`github.com/davshn/narsil-check`), whether SSH or HTTPS. | Opens it in the browser. |
+| **Carpeta** (folder) | The session's working folder. | Opens the folder picker and moves the session to the one you choose. |
+| **Rama** (branch) | The current git branch. | Opens a terminal tab in the working folder. |
+| **Control remoto** (remote control) | A switch: `●━━ desactivado` (off) in gray, `━━● activado` (on) in green. | Turns it on or off. |
+| **CI** | Only with an open PR: the GitHub Actions steps of the last commit on its branch (`✓ Lint`, `◐ Typecheck`, `○ Build`, `✗` if it failed), without GitHub's internal steps (`Set up job`, `Post …`). The line sums up the progress: `CI · 2/4 · Typecheck`, `CI · pasó` (passed), `CI · falló` (failed), or `esperando el CI del último push` (waiting for the CI of the last push) if the branch has a commit no run has picked up yet. While it runs, it is read again every 10 seconds with `gh`, and reading stops when it finishes. | Collapses or expands the steps; it stays as you left it. |
+| **Auto-fix** | The same kind of switch for the session's open PR: with it on, the app wakes Claude up when CI fails, there is a conflict, or a review comment arrives. With no open PR it says `sin PR abierto` (no open PR). | Turns it on or off; the app may ask you for permission first. |
 
-### Conectores
-Los servidores MCP de la sesión: primero los conectados, con cuántas herramientas tiene cada uno (`engram · 19 herramientas`), y después los demás con su estado (`Gmail · needs_auth`).
+### Connectors
+The session's MCP servers: first the connected ones, with how many tools each has (`engram · 19 herramientas`, *19 tools*), and then the rest with their status (`Gmail · needs_auth`).
 
-Entorno, Conectores y el control remoto se leen de los servidores MCP propios de la app de escritorio. Al empezar la sesión el panel muestra «Leyendo la sesión…» y les pregunta una sola vez, a los diez segundos. Si la app recibe una llamada antes de confirmar qué servidor ofrece la herramienta, pide permiso aunque estés en modo de omitir permisos. Si esa lectura falla, se repite al empezar tu primer turno, sin reintentos rápidos. Al terminar cada turno vuelve a leer la carpeta y la rama con git, así que una rama que cambió durante el turno aparece sin hacer nada. A los servidores de la app solo les pregunta otra vez si el turno usó una herramienta que cambia su respuesta (control remoto, worktree, carpeta, conectores o el PR de la sesión, también un `gh pr` o un `git push` en la terminal) o si la lectura anterior falló. La app puede vincular el PR después de que termina el turno que lo abrió: si tras un `gh pr` o un `git push` todavía no aparece ningún PR, el panel vuelve a preguntar solo por el PR a los 5, 15 y 30 segundos, y deja de hacerlo apenas lo encuentra o cuando termina la sesión (también con `/clear`). Al abrir cada desplegable lo lee todo de nuevo. Cada pregunta a esos servidores les llega a los demás mods como una llamada a herramienta, por eso se hacen pocas.
+Environment, Connectors, and remote control are read from the desktop app's own MCP servers. When the session starts, the pane shows "Leyendo la sesión…" (*reading the session…*) and asks them only once, after ten seconds. If the app receives a call before it confirms which server offers the tool, it asks for permission even in bypass permissions mode. If that read fails, it is repeated when your first turn starts, without quick retries. At the end of each turn it reads the folder and the branch again with git, so a branch that changed during the turn shows up without you doing anything. It only asks the app's servers again if the turn used a tool that changes their answer (remote control, worktree, folder, connectors, or the session's PR, including a `gh pr` or a `git push` in the terminal) or if the previous read failed. The app may link the PR after the turn that opened it ends: if no PR shows up yet after a `gh pr` or a `git push`, the pane asks again only about the PR at 5, 15, and 30 seconds, and stops as soon as it finds it or when the session ends (also with `/clear`). Opening each dropdown reads everything again. Each question to those servers reaches the other mods as a tool call, which is why there are few of them.
 
-### Actualizaciones
-Las librerías desactualizadas, en cuatro grupos:
+### Upgrades
+Outdated libraries, in four groups:
 
-| Grupo | Cuándo | Qué hacer |
+| Group | When | What to do |
 | --- | --- | --- |
-| **Fuera del SDK de Expo** | La versión instalada no cumple el rango que fija el SDK de Expo del proyecto. | `npx expo install --fix` |
-| **Bloqueada** | Algo impide subirla sola: una dependencia que no la acepta, un plugin del compilador atado a la versión actual, un comentario que la fija a propósito o una versión publicada hace menos de 24 horas. El motivo aparece debajo. | Resolver primero lo que la bloquea. |
-| **Versión mayor** | Hay una versión major nueva (o un salto de minor por debajo de 1.0.0). | Leer los cambios: pueden romper la API. |
-| **Solo subir la versión** | Hay un parche o una minor nueva. | Subir la versión. |
+| **Fuera del SDK de Expo** (outside the Expo SDK) | The installed version does not meet the range set by the project's Expo SDK. | `npx expo install --fix` |
+| **Bloqueada** (blocked) | Something prevents upgrading it on its own: a dependency that does not accept it, a compiler plugin tied to the current version, a comment that pins it on purpose, or a version published less than 24 hours ago. The reason appears below. | Resolve what blocks it first. |
+| **Versión mayor** (major version) | There is a new major version (or a minor jump below 1.0.0). | Read the changes: they may break the API. |
+| **Solo subir la versión** (just bump the version) | There is a new patch or minor. | Bump the version. |
 
-Las librerías al día no aparecen. En un proyecto Expo, una librería que el SDK fija no se ofrece para actualizar aunque npm tenga una versión más nueva: se sube junto con el SDK.
+Libraries that are up to date do not appear. In an Expo project, a library the SDK pins is not offered for upgrade even if npm has a newer version: it is upgraded together with the SDK.
 
-Las versiones salen del registro de cada ecosistema, no de un modelo. Cada respuesta se guarda 6 horas, y el botón **Revisar de nuevo** fuerza una consulta nueva. Si el proyecto usa más de un ecosistema, cada librería lleva el suyo al lado (`zod 3.22.4 → 3.25.1 · npm`).
+Versions come from each ecosystem's registry, not from a model. Each answer is cached for 6 hours, and the **Revisar de nuevo** button forces a new query. If the project uses more than one ecosystem, each library shows its own next to it (`zod 3.22.4 → 3.25.1 · npm`).
 
-### Dependencias que se bloquean entre sí
-Solo en npm. Antes de clasificar una actualización, el panel hace tres comprobaciones con los datos del registro, de `node_modules` y de `package-lock.json`, sin usar un modelo:
+### Dependencies that block each other
+npm only. Before classifying an upgrade, the pane runs three checks with data from the registry, `node_modules`, and `package-lock.json`, without using a model:
 
-- **Lo que pide la versión nueva**: si `eslint-plugin-astro` 3.2.1 necesita `eslint >=10.0.0` y tienes eslint 9, no se puede subir sola.
-- **Lo que piden los paquetes instalados**: si `eslint-config-love` exige `eslint ^9.35.0`, eslint 10 no se puede subir sola. Se lee de `node_modules`; si todavía no instalaste (un repositorio recién clonado o creado desde una plantilla), de `package-lock.json` o `pnpm-lock.yaml`, así que el resultado es el mismo antes y después de instalar.
-- **Versiones fijadas en el árbol**: si un paquete instalado, aunque no lo declares tú, fija la librería en una versión exacta, subirla dejaría dos copias. Por ejemplo, `typescript-eslint` 8.71.0 fija `@typescript-eslint/parser` 8.71.0: subir el parser a 8.72.1 hace que ESLint cargue el plugin dos veces ("Cannot redefine plugin"). No cuenta si quien la fija sube en el mismo lote a la misma versión, como la familia `@tailwindcss/*` con `tailwindcss`. Un rango que no es una versión exacta (`^8.53.0`) no se marca: una copia anidada ahí suele ser inofensiva. Esta comprobación usa `package-lock.json`, así que con yarn, pnpm o bun no se hace.
+- **What the new version requires**: if `eslint-plugin-astro` 3.2.1 needs `eslint >=10.0.0` and you have eslint 9, it cannot be upgraded on its own.
+- **What the installed packages require**: if `eslint-config-love` requires `eslint ^9.35.0`, eslint 10 cannot be upgraded on its own. It is read from `node_modules`; if you have not installed yet (a freshly cloned repository or one created from a template), from `package-lock.json` or `pnpm-lock.yaml`, so the result is the same before and after installing.
+- **Versions pinned in the tree**: if an installed package, even one you do not declare, pins the library to an exact version, upgrading it would leave two copies. For example, `typescript-eslint` 8.71.0 pins `@typescript-eslint/parser` 8.71.0: upgrading the parser to 8.72.1 makes ESLint load the plugin twice ("Cannot redefine plugin"). It does not count if the package that pins it is upgraded in the same batch to the same version, like the `@tailwindcss/*` family with `tailwindcss`. A range that is not an exact version (`^8.53.0`) is not flagged: a nested copy there is usually harmless. This check uses `package-lock.json`, so it is not done with yarn, pnpm, or bun.
 
-Cualquier actualización con un conflicto, sea de parche, menor o mayor, va al grupo **Bloqueada**, con cada conflicto escrito debajo, y el botón **Actualizar las N** nunca la incluye. Un peer que el proyecto no tiene instalado no cuenta como conflicto: es npm quien lo añade. Los conflictos se comparan con las versiones instaladas ahora; si subes varias juntas, puede que el bloqueo se resuelva entre ellas.
+Any upgrade with a conflict, whether patch, minor, or major, goes to the **Bloqueada** group, with each conflict written below, and the **Actualizar las N** (update the N) button never includes it. A peer the project does not have installed does not count as a conflict: npm adds it. Conflicts are compared with the versions installed now; if you upgrade several together, the block may resolve between them.
 
-### Espera de 24 horas
-En todos los ecosistemas, una versión publicada hace menos de 24 horas va a **Bloqueada**, por ejemplo con *"Publicada hace 3 h: Narsil Check espera 24 h antes de subirla"*. Así una versión recién publicada, que todavía nadie ha probado o que puede venir de una cuenta comprometida, no entra sola en el proyecto. La fecha sale del registro de cada ecosistema:
+### 24-hour wait
+In every ecosystem, a version published less than 24 hours ago goes to **Bloqueada**, for example with *"Publicada hace 3 h: Narsil Check espera 24 h antes de subirla"* (*published 3 h ago: Narsil Check waits 24 h before upgrading it*). That way a freshly published version, which nobody has tested yet or which may come from a compromised account, does not get into the project on its own. The date comes from each ecosystem's registry:
 
-| Ecosistema | De dónde sale la fecha |
+| Ecosystem | Where the date comes from |
 | --- | --- |
-| npm y Expo | `time` del registro de npm; si no llega (paquetes de ~10 MB como astro), `pnpm view` o `npm view` |
-| PyPI | el primer archivo subido de esa versión |
-| Go | `Time` del proxy de Go |
-| Cargo | `created_at` de crates.io |
-| Pub | `published` de pub.dev |
-| NuGet | `published` del registro de NuGet (el de SemVer 1, y si no está, el de SemVer 2) |
-| RubyGems | `created_at` de rubygems.org |
-| Gradle y Maven | la fecha del POM (`Last-Modified`) en Maven Central, Google Maven o el Gradle Plugin Portal |
-| SwiftPM | cuándo GitHub publicó el *release* de ese tag. Es una fecha que pone GitHub, no la del commit, que el autor podría falsificar |
+| npm and Expo | `time` from the npm registry; if it does not arrive (~10 MB packages like astro), `pnpm view` or `npm view` |
+| PyPI | the first file uploaded for that version |
+| Go | `Time` from the Go proxy |
+| Cargo | `created_at` from crates.io |
+| Pub | `published` from pub.dev |
+| NuGet | `published` from the NuGet registry (the SemVer 1 one, and if it is not there, the SemVer 2 one) |
+| RubyGems | `created_at` from rubygems.org |
+| Gradle and Maven | the POM's date (`Last-Modified`) on Maven Central, Google Maven, or the Gradle Plugin Portal |
+| SwiftPM | when GitHub published the release for that tag. It is a date set by GitHub, not the commit's, which the author could fake |
 
-No hay excepciones: nada sube sin prueba de que esperó. Cuando la fecha no se puede leer (un tag sin *release*, un paquete Swift fuera de GitHub, un registro que no responde), la prueba es **cuándo vio el panel esa versión por primera vez**: una versión nunca es más nueva que el momento en que apareció, así que 24 horas después ya lleva al menos un día publicada. Mientras tanto queda bloqueada con *"No pude leer cuándo se publicó y la vi por primera vez hace 3 h: Narsil Check espera 24 h antes de subirla"*. Así una librería sin fecha nunca queda bloqueada para siempre. Una respuesta que no es una fecha nunca se guarda, así que el siguiente escaneo vuelve a preguntar. Cuando la versión cumple el día, deja de estar bloqueada en el siguiente escaneo.
+There are no exceptions: nothing gets upgraded without proof that it waited. When the date cannot be read (a tag with no release, a Swift package outside GitHub, a registry that does not respond), the proof is **when the pane first saw that version**: a version is never newer than the moment it appeared, so 24 hours later it has been published for at least a day. Meanwhile it stays blocked with *"No pude leer cuándo se publicó y la vi por primera vez hace 3 h: Narsil Check espera 24 h antes de subirla"* (*I could not read when it was published and first saw it 3 h ago*). That way a library with no date is never blocked forever. An answer that is not a date is never cached, so the next scan asks again. When the version reaches one day, it stops being blocked on the next scan.
 
-En un proyecto Expo, una librería que el SDK fija se sube con `npx expo install --fix`, que instala la versión más nueva que cumple el rango del SDK. Esa versión también espera el día, o el `minimumReleaseAge` de pnpm si es más largo; mientras tanto la librería va a **Bloqueada** con la versión y el comando: *"El SDK de Expo pide 17.0.8 (npx expo install --fix). Publicada hace 1 h: …"*.
+In an Expo project, a library the SDK pins is upgraded with `npx expo install --fix`, which installs the newest version that meets the SDK's range. That version also waits the day, or pnpm's `minimumReleaseAge` if it is longer; meanwhile the library goes to **Bloqueada** with the version and the command: *"El SDK de Expo pide 17.0.8 (npx expo install --fix). Publicada hace 1 h: …"* (*the Expo SDK asks for 17.0.8*).
 
-En un proyecto con pnpm cuenta además su `minimumReleaseAge`, si es más largo que un día, con el aviso *"pnpm espera 48 h para instalarla (minimumReleaseAge)"*. Si se instalara antes, el `pnpm install --frozen-lockfile` del CI la rechazaría. El valor se lee de `pnpm-workspace.yaml` (o de `minimum-release-age` en `.npmrc`) tal como está en `HEAD`, porque eso es lo que ve el CI. Un valor menor que un día no baja la espera. `minimumReleaseAgeExclude` se ignora, esté en `HEAD` o sin commit.
+In a pnpm project, its `minimumReleaseAge` also counts if it is longer than a day, with the notice *"pnpm espera 48 h para instalarla (minimumReleaseAge)"* (*pnpm waits 48 h to install it*). If it were installed earlier, the CI's `pnpm install --frozen-lockfile` would reject it. The value is read from `pnpm-workspace.yaml` (or from `minimum-release-age` in `.npmrc`) as it is at `HEAD`, because that is what CI sees. A value shorter than a day does not lower the wait. `minimumReleaseAgeExclude` is ignored, whether at `HEAD` or uncommitted.
 
-La espera también cubre las dependencias que arrastra una actualización, donde la herramienta lo permite:
+The wait also covers the dependencies an upgrade pulls in, where the tool allows it:
 
-- **pnpm** instala con `minimumReleaseAge` en modo estricto y sin excepciones. Una dependencia demasiado nueva hace fallar la instalación en vez de quedar en el lockfile con una excepción escrita en `pnpm-workspace.yaml`. El panel lo marca como *"Bloqueada por minimumReleaseAge"* con las versiones que pnpm rechazó, y no se actualiza nada.
-- **npm** instala con `before` puesto un día atrás, así que cada rango se resuelve a versiones de hace al menos un día. Si un rango no tiene ninguna, el panel lo marca como *"Bloqueada por la espera de 24 h"* y no se actualiza nada.
-- **yarn, bun, Cargo, Go, uv, Poetry, Pub, NuGet, Bundler, SwiftPM, Gradle y Maven** no tienen una opción así, así que la espera se aplica a la librería que sube, no a lo que arrastra.
+- **pnpm** installs with `minimumReleaseAge` in strict mode and with no exceptions. A dependency that is too new makes the install fail instead of ending up in the lockfile with an exception written in `pnpm-workspace.yaml`. The pane marks it as *"Bloqueada por minimumReleaseAge"* (*blocked by minimumReleaseAge*) with the versions pnpm rejected, and nothing is upgraded.
+- **npm** installs with `before` set one day back, so each range resolves to versions at least one day old. If a range has none, the pane marks it as *"Bloqueada por la espera de 24 h"* (*blocked by the 24 h wait*) and nothing is upgraded.
+- **yarn, bun, Cargo, Go, uv, Poetry, Pub, NuGet, Bundler, SwiftPM, Gradle, and Maven** have no such option, so the wait applies to the library being upgraded, not to what it pulls in.
 
-### Versiones fijadas a propósito
-En cualquier ecosistema cuyo manifest admite comentarios (todos menos npm, cuyo `package.json` no los tiene), una librería se bloquea si un comentario dice que se mantiene a propósito, en la línea de su versión o en la de arriba. Cuentan las palabras *pin*, *pinned*, *hold*, *keep*, *freeze*, *do not upgrade* y, en español, *fijar*, *fijado*, *congelado* o *no actualizar*. El panel muestra el comentario como motivo:
+### Versions pinned on purpose
+In any ecosystem whose manifest allows comments (all but npm, whose `package.json` has none), a library is blocked if a comment says it is kept on purpose, on its version's line or the line above. The words that count are *pin*, *pinned*, *hold*, *keep*, *freeze*, *do not upgrade* and, in Spanish, *fijar*, *fijado*, *congelado*, or *no actualizar*. The pane shows the comment as the reason:
 
 ```toml
 [versions]
@@ -131,61 +133,61 @@ kotlin = "2.4.20"
 ktor = "3.6.1" # pinned: 3.7 breaks auth
 ```
 
-### Kotlin y los plugins del compilador
-Un plugin del compilador de Kotlin solo funciona con las versiones de Kotlin para las que se publicó: si no coinciden, el proyecto no compila (con SKIE, el framework de iOS). Por eso, si el proyecto declara uno, Kotlin pasa a **Bloqueada** aunque el salto sea un parche, por ejemplo con *"SKIE 0.10.16 es un plugin del compilador de Kotlin: confirma que soporta Kotlin 2.4.21"*. Se reconocen SKIE, KSP, Mokkery, Realm, Metro, kotlinx-rpc y Anvil, por sus coordenadas o por la clave del catálogo (`mokkery = "3.6.0"` cuenta aunque solo lo lea un módulo de `build-logic`). KSP se comprueba exactamente: su versión lleva dentro la de Kotlin para la que se hizo (`2.4.20-1.0.30`), y una de KSP2 sin Kotlin en el nombre (`2.3.0`) sirve para cualquiera. Las librerías `kotlinx` (coroutines, serialization) no cuentan como Kotlin: suben por su cuenta.
+### Kotlin and compiler plugins
+A Kotlin compiler plugin only works with the Kotlin versions it was published for: if they do not match, the project does not compile (with SKIE, the iOS framework). That is why, if the project declares one, Kotlin goes to **Bloqueada** even if the jump is a patch, for example with *"SKIE 0.10.16 es un plugin del compilador de Kotlin: confirma que soporta Kotlin 2.4.21"* (*SKIE 0.10.16 is a Kotlin compiler plugin: confirm it supports Kotlin 2.4.21*). SKIE, KSP, Mokkery, Realm, Metro, kotlinx-rpc, and Anvil are recognized, by their coordinates or by their catalog key (`mokkery = "3.6.0"` counts even if only a `build-logic` module reads it). KSP is checked exactly: its version contains the Kotlin version it was made for (`2.4.20-1.0.30`), and a KSP2 version without Kotlin in its name (`2.3.0`) works with any of them. The `kotlinx` libraries (coroutines, serialization) do not count as Kotlin: they are upgraded on their own.
 
-### Gradle, AGP, Kotlin y Compose Multiplatform
-En un proyecto Android o Kotlin Multiplatform, estas herramientas dependen unas de otras, igual que los módulos de Expo dependen del SDK. Subir una sola puede romper el build, así que va a **Bloqueada** cuando la otra no llega al mínimo:
+### Gradle, AGP, Kotlin, and Compose Multiplatform
+In an Android or Kotlin Multiplatform project, these tools depend on each other, just as Expo modules depend on the SDK. Upgrading only one can break the build, so it goes to **Bloqueada** when the other does not reach the minimum:
 
-| Sube | Necesita | Fuente |
+| Upgrade | Needs | Source |
 | --- | --- | --- |
-| Android Gradle Plugin | la versión de Gradle mínima de esa AGP, comparada con la que fija `gradle/wrapper/gradle-wrapper.properties` (o `android/gradle/wrapper/…` en React Native). Ejemplo: *"AGP 8.13.0 necesita Gradle 8.13 o más; el wrapper usa 8.11.1"* | [Google](https://developer.android.com/build/releases/about-agp) |
-| AGP 9, desde 8.x | que ningún módulo combine `org.jetbrains.kotlin.multiplatform` con `com.android.library` o `com.android.application` (pasan a `com.android.kotlin.multiplatform.library`) y que no se use kapt | [Google](https://developer.android.com/build/migrate-to-built-in-kotlin) |
-| Kotlin | la AGP y el Gradle mínimos de su plugin de Gradle (Kotlin 2.4 necesita AGP 8.5.2) | [JetBrains](https://kotlinlang.org/docs/gradle-configure-project.html) |
-| Compose Multiplatform | el Kotlin mínimo para iOS y web (1.10 necesita Kotlin 2.2, 1.11 y 1.12 necesitan 2.3) y AGP 8.1 desde 1.7 | [JetBrains](https://github.com/JetBrains/compose-multiplatform/blob/master/CHANGELOG.md) |
-| KSP 2.3.12 o más | AGP 8.12.0 | [KSP](https://github.com/google/ksp/releases) |
+| Android Gradle Plugin | that AGP's minimum Gradle version, compared with the one set by `gradle/wrapper/gradle-wrapper.properties` (or `android/gradle/wrapper/…` in React Native). Example: *"AGP 8.13.0 necesita Gradle 8.13 o más; el wrapper usa 8.11.1"* (*AGP 8.13.0 needs Gradle 8.13 or later; the wrapper uses 8.11.1*) | [Google](https://developer.android.com/build/releases/about-agp) |
+| AGP 9, from 8.x | that no module combines `org.jetbrains.kotlin.multiplatform` with `com.android.library` or `com.android.application` (they move to `com.android.kotlin.multiplatform.library`) and that kapt is not used | [Google](https://developer.android.com/build/migrate-to-built-in-kotlin) |
+| Kotlin | the minimum AGP and Gradle of its Gradle plugin (Kotlin 2.4 needs AGP 8.5.2) | [JetBrains](https://kotlinlang.org/docs/gradle-configure-project.html) |
+| Compose Multiplatform | the minimum Kotlin for iOS and web (1.10 needs Kotlin 2.2, 1.11 and 1.12 need 2.3) and AGP 8.1 from 1.7 | [JetBrains](https://github.com/JetBrains/compose-multiplatform/blob/master/CHANGELOG.md) |
+| KSP 2.3.12 or later | AGP 8.12.0 | [KSP](https://github.com/google/ksp/releases) |
 
-Solo se comprueban los mínimos. Los máximos que publica JetBrains son lo que tiene soporte completo, no un fallo, y Google mismo combina versiones que los pasan. Una versión de AGP o de Compose Multiplatform más nueva que las tablas que conoce el panel también queda bloqueada, con *"confirma qué Gradle necesita"*. Lo mismo pasa con una actualización de AGP cuando el proyecto no tiene el wrapper de Gradle. El wrapper solo se lee: nunca entra en el commit del PR.
+Only the minimums are checked. The maximums JetBrains publishes are what has full support, not a failure, and Google itself combines versions that exceed them. An AGP or Compose Multiplatform version newer than the tables the pane knows is also blocked, with *"confirma qué Gradle necesita"* (*confirm which Gradle it needs*). The same happens with an AGP upgrade when the project has no Gradle wrapper. The wrapper is only read: it never goes into the PR's commit.
 
-### Por qué una versión mayor no es trivial
-Debajo de cada librería con versión mayor, el panel muestra la dificultad (baja, media o alta) y la razón, en una o dos frases. Para eso, Haiku recibe:
+### Why a major version is not trivial
+Under each library with a major version, the pane shows the difficulty (low, medium, or high) and the reason, in one or two sentences. For that, Haiku receives:
 
-- **Las notas de las versiones que rompen**: el release de GitHub de cada nueva versión mayor (hasta tres), buscado como `v19.0.0`, `@scope/nombre@19.0.0` o `19.0.0`. Si no hay release, se usa el `CHANGELOG.md` del paquete desde la versión instalada.
-- **Cómo usa tu proyecto la librería**: los archivos y las líneas que la importan, sacados con `git grep`.
+- **The notes of the breaking versions**: the GitHub release of each new major version (up to three), searched as `v19.0.0`, `@scope/name@19.0.0`, or `19.0.0`. If there is no release, the package's `CHANGELOG.md` from the installed version on is used.
+- **How your project uses the library**: the files and lines that import it, found with `git grep`.
 
-Se le pide que se base solo en eso y que no invente cambios. La razón de cada salto (por ejemplo, `react 18.2.0 → 19.2.0`) se pide una vez y se guarda; no se vuelve a pedir en otras sesiones. Un clic en una versión mayor la copia con su dificultad y su razón, y uno en una bloqueada, con lo que la bloquea.
+It is asked to rely only on that and not to make up changes. The reason for each jump (for example, `react 18.2.0 → 19.2.0`) is requested once and cached; it is not requested again in other sessions. A click on a major version copies it with its difficulty and reason, and one on a blocked version, with what blocks it.
 
-La API de GitHub sin sesión permite 60 consultas por hora. Si se agotan, el análisis usa el `CHANGELOG.md` o dice que no encontró notas.
+GitHub's API without a session allows 60 queries per hour. If they run out, the analysis uses the `CHANGELOG.md` or says it found no notes.
 
-### Actualizar las triviales
-El grupo **Solo subir la versión** tiene un botón que sube todas sus librerías de una vez, cada ecosistema con su herramienta (ver [Ecosistemas](#ecosistemas)). Cada librería conserva el operador de su rango (`^3.22.0` pasa a `^3.25.1`, `>=2.31,<3` pasa a `>=2.34.2,<3`) y su sección. Las versiones mayores y las de Expo no se tocan: hay que revisarlas. Si la instalación falla, el panel muestra el final del error. Después de actualizar, ejecuta los tests antes de hacer commit.
+### Upgrading the trivial ones
+The **Solo subir la versión** group has a button that upgrades all its libraries at once, each ecosystem with its own tool (see [Ecosystems](#ecosystems)). Each library keeps its range operator (`^3.22.0` becomes `^3.25.1`, `>=2.31,<3` becomes `>=2.34.2,<3`) and its section. Major versions and Expo ones are not touched: they need a review. If the install fails, the pane shows the end of the error. After upgrading, run the tests before committing.
 
-### Crear el PR
-Cuando los manifests (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `pubspec.yaml`...) tienen rangos de dependencias distintos de los de `HEAD`, el panel los lista con un botón para subirlos, da igual si los actualizó el panel o lo hiciste a mano. Lo que hace el botón depende de la rama en la que estás:
+### Creating the PR
+When the manifests (`package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `pubspec.yaml`...) have dependency ranges different from those at `HEAD`, the pane lists them with a button to push them, whether the pane upgraded them or you did it by hand. What the button does depends on your current branch:
 
-- **En una rama de trabajo** (**Commit y push a &lt;rama&gt;**): hace el commit y el push a esa misma rama, y nada más. El PR lo gestionas tú.
-- **En la rama principal** (**Crear rama, commit y PR**), la que indica `origin/HEAD` o, si no hay, `main` o `master`:
-  1. Crea la rama `chore/upgrade-deps-AAAA-MM-DD`. Si ese nombre ya existe, le agrega la hora.
-  2. Hace el commit y sube la rama a `origin`.
-  3. Abre el PR con `gh` contra la rama principal.
-  4. Vuelve a la rama principal (`git switch`) y revisa de nuevo las librerías. Ahí los manifests tienen las versiones viejas y lo instalado (`node_modules`) puede tener las nuevas: reinstala si vas a seguir trabajando en la principal. Si git no puede cambiar de rama, te quedas en la nueva y el panel dice por qué.
+- **On a work branch** (**Commit y push a &lt;rama&gt;**, *commit and push to &lt;branch&gt;*): it commits and pushes to that same branch, and nothing else. You manage the PR.
+- **On the main branch** (**Crear rama, commit y PR**, *create branch, commit, and PR*), the one `origin/HEAD` points to or, if there is none, `main` or `master`:
+  1. Creates the `chore/upgrade-deps-YYYY-MM-DD` branch. If that name already exists, it adds the time.
+  2. Commits and pushes the branch to `origin`.
+  3. Opens the PR with `gh` against the main branch.
+  4. Goes back to the main branch (`git switch`) and checks the libraries again. There the manifests have the old versions and what is installed (`node_modules`) may have the new ones: reinstall if you will keep working on the main branch. If git cannot switch branches, you stay on the new one and the pane says why.
 
-En los dos casos, el commit lleva solo los manifests y lockfiles de los ecosistemas que cambiaron, con el mensaje `chore(deps): upgrade N dependencies` y la lista de cambios. El resto de tus cambios sin commit no se incluye. Claude Code ejecuta git con los hooks del repositorio desactivados, así que los hooks de commit (por ejemplo, husky) no corren.
+In both cases, the commit only contains the manifests and lockfiles of the ecosystems that changed, with the message `chore(deps): upgrade N dependencies` and the list of changes. The rest of your uncommitted changes are not included. Claude Code runs git with the repository's hooks disabled, so commit hooks (for example, husky) do not run.
 
-### Vulnerabilidades
-La sección **Vulnerabilidades** lista las vulnerabilidades conocidas de los paquetes del proyecto según [OSV.dev](https://osv.dev), la base abierta que reúne los avisos de GitHub (los mismos de `npm audit`), PyPI, Go, crates.io, RubyGems y el resto. Una sola consulta sirve para los nueve ecosistemas, sin instalar `pnpm audit`, `pip-audit`, `cargo-audit` ni `govulncheck`.
+### Vulnerabilities
+The **Vulnerabilidades** section lists the known vulnerabilities of the project's packages according to [OSV.dev](https://osv.dev), the open database that gathers the advisories from GitHub (the same ones as `npm audit`), PyPI, Go, crates.io, RubyGems, and the rest. A single query covers all nine ecosystems, without installing `pnpm audit`, `pip-audit`, `cargo-audit`, or `govulncheck`.
 
-- **Qué se revisa**: todo el árbol instalado donde hay un lockfile que lo dice (`package-lock.json`, `Cargo.lock`, `uv.lock` o `poetry.lock`, `Gemfile.lock`, `pubspec.lock`, `Package.resolved` y los `require` de `go.mod`, también los indirectos); en Maven y NuGet, las dependencias declaradas. Un paquete que no declaras tú lleva la marca *indirecta*.
-- **Gravedad**: la del propio aviso (Crítica, Alta, Moderada, Baja) y, si no la trae, la que da la nota de su vector CVSS v3. Sin ninguna de las dos, *Sin clasificar*. Un mismo problema con dos identificadores (GHSA y PYSEC) cuenta una vez.
-- **Cada aviso** muestra el paquete y su versión, su identificador, el resumen y la primera versión que lo corrige.
-- **Copiar**: un clic en un aviso lo pone en el portapapeles con su gravedad, el arreglo y el enlace a OSV.
-- **Con Actualizaciones**: si la actualización que ofrece el panel corrige vulnerabilidades, la fila lo dice en rojo (`lodash 4.17.20 → 4.17.21 · corrige 2 vulnerabilidades`) y sube al principio de su grupo.
-- **Cuándo**: después de cada revisión de actualizaciones (al abrir la sesión, con el botón o con el comando), con su propio botón **Consultar de nuevo** y con `/narsil-check vulns`. Los detalles de cada aviso se guardan y solo se piden de nuevo cuando OSV dice que cambiaron.
+- **What is checked**: the whole installed tree wherever a lockfile records it (`package-lock.json`, `Cargo.lock`, `uv.lock` or `poetry.lock`, `Gemfile.lock`, `pubspec.lock`, `Package.resolved`, and the `require` entries in `go.mod`, including indirect ones); in Maven and NuGet, the declared dependencies. A package you do not declare yourself is marked *indirecta* (indirect).
+- **Severity**: the advisory's own (Crítica, Alta, Moderada, Baja: critical, high, moderate, low) and, if it has none, the one given by its CVSS v3 vector score. With neither, *Sin clasificar* (unclassified). The same problem with two identifiers (GHSA and PYSEC) counts once.
+- **Each advisory** shows the package and its version, its identifier, the summary, and the first version that fixes it.
+- **Copy**: a click on an advisory puts it on the clipboard with its severity, the fix, and the OSV link.
+- **With Upgrades**: if the upgrade the pane offers fixes vulnerabilities, the row says so in red (`lodash 4.17.20 → 4.17.21 · corrige 2 vulnerabilidades`, *fixes 2 vulnerabilities*) and moves to the top of its group.
+- **When**: after each upgrade check (when the session opens, with the button, or with the command), with its own **Consultar de nuevo** (query again) button, and with `/narsil-check vulns`. Each advisory's details are cached and only requested again when OSV says they changed.
 
-El número de vulnerabilidades es el de avisos, no el de paquetes: `npm audit` cuenta además los paquetes que solo dependen de uno vulnerable, que aquí no se repiten.
+The number of vulnerabilities is the number of advisories, not of packages: `npm audit` also counts the packages that only depend on a vulnerable one, which are not repeated here.
 
-### Pendientes
-Una lista de tareas del proyecto para apuntar lo que se te ocurre mientras trabajas en otra cosa. Cada tarea tiene un nombre y, si quieres, un contenido:
+### Pending tasks
+A project task list to jot down what comes to mind while you work on something else. Each task has a name and, if you want, a body:
 
 ```
 ▾ Pendientes · 2
@@ -195,133 +197,132 @@ Una lista de tareas del proyecto para apuntar lo que se te ocurre mientras traba
   [ Nueva tarea (nombre: contenido) ]
 ```
 
-- **Añadir**: escribe en el campo y pulsa Enter. Lo que va después de los primeros dos puntos es el contenido (`Subir TypeScript: revisar los tipos`); sin dos puntos, la tarea solo tiene nombre.
-- **Leer**: un clic en el nombre muestra u oculta el contenido. Una tarea sin contenido no se despliega.
-- **Terminar**: un clic en `○` la quita de la lista. No se guarda historial de tareas hechas.
-- **Con Claude**: Claude tiene sus propias herramientas para listar, añadir y terminar tareas (`todo_list`, `todo_add`, `todo_done`). Pídele "apunta en pendientes…" o "haz la tarea de…", y la tacha él mismo al terminarla. No las lee en cada mensaje, así que no gastan contexto hasta que las usa.
+- **Add**: type in the field and press Enter. What comes after the first colon is the body (`Upgrade TypeScript: check the types`); with no colon, the task only has a name.
+- **Read**: a click on the name shows or hides the body. A task with no body does not expand.
+- **Finish**: a click on `○` removes it from the list. No history of finished tasks is kept.
+- **With Claude**: Claude has its own tools to list, add, and finish tasks (`todo_list`, `todo_add`, `todo_done`). Ask it "add to pending tasks…" or "do the task about…", and it checks the task off itself when it is done. It does not read them on every message, so they use no context until it uses them.
 
-La lista se guarda en `.atl/narsil-check/pendientes.json`, dentro del proyecto. La primera vez, el panel añade esa carpeta a `.git/info/exclude`, la lista de archivos ignorados local de git: nunca entra en un commit y no toca tu `.gitignore`. Si ese archivo no se puede escribir, la tarea se guarda igual.
+The list is saved in `.atl/narsil-check/pendientes.json`, inside the project. The first time, the pane adds that folder to `.git/info/exclude`, git's local list of ignored files: it never goes into a commit and does not touch your `.gitignore`. If that file cannot be written, the task is saved anyway.
 
-Se lee al empezar la sesión y se escribe con cada cambio. Dentro de una sesión los cambios van de uno en uno y cada uno vuelve a leer el archivo justo antes de escribirlo, así que puedes añadir o terminar tareas mientras Claude trabaja, y una tarea que otra sesión haya guardado antes no se pierde. Lo que no está protegido es que dos sesiones del mismo proyecto escriban en el mismo instante: entonces el último cambio puede pisar al otro.
+It is read when the session starts and written with each change. Within a session, changes go one at a time and each one reads the file again right before writing it, so you can add or finish tasks while Claude works, and a task another session saved earlier is not lost. What is not protected is two sessions of the same project writing at the very same moment: then the last change may overwrite the other.
 
-Si el archivo se daña (por ejemplo, tras editarlo a mano con un error), el panel no lo trata como una lista vacía: lo deja como está y dice que no se puede leer. Al siguiente cambio guarda una copia junto a él (`pendientes.danado-<fecha>.json`) y empieza una lista nueva, así que no se pierde nada.
+If the file gets corrupted (for example, after editing it by hand with a mistake), the pane does not treat it as an empty list: it leaves it as it is and says it cannot be read. On the next change it saves a copy next to it (`pendientes.danado-<date>.json`) and starts a new list, so nothing is lost.
 
-#### Tareas para una plantilla
-Cuando en un proyecto haces algo que también conviene hacer en la plantilla de la que salió (por ejemplo, una actualización complicada), díselo a Claude con:
+#### Tasks for a template
+When you do something in a project that is also worth doing in the template it came from (for example, a tricky upgrade), tell Claude with:
 
 ```
-/narsil-check template "en backendTemplate crea la tarea de actualizar TypeScript a 7.0.0, explica lo que tuviste que hacer"
+/narsil-check template "in backendTemplate create the task to upgrade TypeScript to 7.0.0, explain what you had to do"
 ```
 
-Claude busca la carpeta de la plantilla junto a este proyecto (sin distinguir mayúsculas, guiones ni espacios; también acepta una ruta absoluta), escribe la explicación, porque sabe cómo se hizo, y crea la tarea en **Pendientes** de la plantilla con la herramienta `todo_add_to_template`. Si no encuentra la carpeta o hay varias parecidas, te pregunta cuál es.
+Claude looks for the template's folder next to this project (ignoring case, hyphens, and spaces; it also accepts an absolute path), writes the explanation, because it knows how it was done, and creates the task in the template's **Pendientes** with the `todo_add_to_template` tool. If it cannot find the folder or there are several similar ones, it asks you which one.
 
-## Ecosistemas
+## Ecosystems
 
-| Ecosistema | Lee | Versión instalada | Registro | El botón ejecuta |
+| Ecosystem | Reads | Installed version | Registry | The button runs |
 | --- | --- | --- | --- | --- |
-| **npm** (JS, TS) y Expo | `package.json` | `node_modules`, luego `package-lock.json` o `pnpm-lock.yaml` | registry.npmjs.org | `npm install` (o pnpm, yarn, bun según el lockfile) |
-| **PyPI** (Python) | `pyproject.toml` (PEP 621, grupos PEP 735, Poetry), `requirements.txt`, `requirements-dev.txt` | `uv.lock` o `poetry.lock`; si no, el pin `==` | pypi.org | reescribe el rango y luego `uv lock` o `poetry lock` |
-| **Go** | los `require` directos de `go.mod` | `go.mod` | proxy.golang.org | `go get módulo@versión` y `go mod tidy` |
-| **Cargo** (Rust) | `Cargo.toml` (dependencies, dev, build y target) | `Cargo.lock` | crates.io | reescribe el requisito y luego `cargo update -p` |
-| **Pub** (Dart, Flutter) | `pubspec.yaml` | `pubspec.lock` | pub.dev | reescribe la restricción y luego `flutter pub get` o `dart pub get` |
-| **Maven** (Kotlin, Java) | `gradle/libs.versions.toml`, cada `build.gradle(.kts)` y `pom.xml` del árbol | la versión escrita | Google Maven, Gradle Plugin Portal o Maven Central | reescribe la versión donde está escrita; Gradle y Maven la descargan en el siguiente build |
-| **NuGet** (C#, F#, VB) | cada `.csproj`, `.fsproj` y `.vbproj` del árbol, `Directory.Packages.props` | la versión escrita | api.nuget.org | reescribe el `Version` y luego `dotnet restore` |
-| **RubyGems** (Ruby) | `Gemfile` | `Gemfile.lock` | rubygems.org | reescribe el requisito y luego `bundle update --conservative` |
-| **SwiftPM** (Swift) | `Package.swift`, el `project.pbxproj` de cada proyecto de Xcode | `Package.resolved` (v1, v2 y v3), también el del workspace de Xcode | los tags de git de cada paquete (`git ls-remote`) | reescribe la versión mínima y luego `swift package update`, o `xcodebuild -resolvePackageDependencies` en una app de Xcode |
-| **Gradle wrapper** | `gradle/wrapper/gradle-wrapper.properties` de la raíz | la versión escrita | services.gradle.org | reescribe la distribución; Gradle la descarga en la siguiente ejecución |
-| **GitHub Actions** | los `uses:` de `.github/workflows` y `.github/actions` | la versión del tag o del comentario junto al commit | los tags de git de cada acción (`git ls-remote`) | reescribe el tag, o el commit y su comentario |
+| **npm** (JS, TS) and Expo | `package.json` | `node_modules`, then `package-lock.json` or `pnpm-lock.yaml` | registry.npmjs.org | `npm install` (or pnpm, yarn, bun depending on the lockfile) |
+| **PyPI** (Python) | `pyproject.toml` (PEP 621, PEP 735 groups, Poetry), `requirements.txt`, `requirements-dev.txt` | `uv.lock` or `poetry.lock`; otherwise the `==` pin | pypi.org | rewrites the range and then `uv lock` or `poetry lock` |
+| **Go** | the direct `require` entries in `go.mod` | `go.mod` | proxy.golang.org | `go get module@version` and `go mod tidy` |
+| **Cargo** (Rust) | `Cargo.toml` (dependencies, dev, build, and target) | `Cargo.lock` | crates.io | rewrites the requirement and then `cargo update -p` |
+| **Pub** (Dart, Flutter) | `pubspec.yaml` | `pubspec.lock` | pub.dev | rewrites the constraint and then `flutter pub get` or `dart pub get` |
+| **Maven** (Kotlin, Java) | `gradle/libs.versions.toml`, every `build.gradle(.kts)` and `pom.xml` in the tree | the written version | Google Maven, Gradle Plugin Portal, or Maven Central | rewrites the version where it is written; Gradle and Maven download it on the next build |
+| **NuGet** (C#, F#, VB) | every `.csproj`, `.fsproj`, and `.vbproj` in the tree, `Directory.Packages.props` | the written version | api.nuget.org | rewrites the `Version` and then `dotnet restore` |
+| **RubyGems** (Ruby) | `Gemfile` | `Gemfile.lock` | rubygems.org | rewrites the requirement and then `bundle update --conservative` |
+| **SwiftPM** (Swift) | `Package.swift`, the `project.pbxproj` of each Xcode project | `Package.resolved` (v1, v2, and v3), including the Xcode workspace's | each package's git tags (`git ls-remote`) | rewrites the minimum version and then `swift package update`, or `xcodebuild -resolvePackageDependencies` in an Xcode app |
+| **Gradle wrapper** | the root `gradle/wrapper/gradle-wrapper.properties` | the written version | services.gradle.org | rewrites the distribution; Gradle downloads it on the next run |
+| **GitHub Actions** | the `uses:` entries in `.github/workflows` and `.github/actions` | the version of the tag or of the comment next to the commit | each action's git tags (`git ls-remote`) | rewrites the tag, or the commit and its comment |
 
-Algunos detalles:
+Some details:
 
-- **Go**: una versión mayor a partir de la v2 es otra ruta de módulo (`github.com/go-chi/chi/v5`). El panel pregunta por cada mayor siguiente hasta que una no existe, así que `chi` 1.5.4 aparece con 5.5.0. Esa actualización exige cambiar los imports, y el botón no la hace.
-- **PyPI**: con solo `requirements.txt` no hay lockfile, así que el botón reescribe los pins y no instala nada: instala tú en tu entorno (`pip install -r requirements.txt`). Para buscar los imports se usa el nombre del módulo (`PyYAML` se importa como `yaml`); algunos nombres poco comunes pueden no encontrarse.
-- **Gradle**: el catálogo de versiones se lee exacto. Una versión que comparten varias librerías o plugins es una sola fila (`ktor (8)`, `kotlin (6)`) y el botón la sube una vez. En los `build.gradle(.kts)` solo se leen las coordenadas escritas como texto (`"io.mockk:mockk:1.13.10"`, `id("x") version "1.2"`): una versión guardada en una variable (`$kotlinVersion`) es código y queda fuera. También queda fuera una versión del catálogo que ninguna librería ni plugin usa, por ejemplo una que lee el `build-logic` con `libs.versions.x`: sin coordenadas no hay a qué registro preguntar. Solo cuentan las versiones estables: el `<release>` de Maven puede ser una alfa (lifecycle `2.12.0-alpha05`), así que se mira la lista completa.
-- **Maven**: se leen las `<dependency>` y los `<plugin>` con versión propia o una `${propiedad}` de `<properties>`. Una versión que gestiona un POM padre o un BOM queda fuera.
-- **NuGet**: los manifests se buscan en todo el árbol (`src/Api/Api.csproj`). Un analizador (`PrivateAssets="all"`) cuenta como dependencia de desarrollo. Una versión con una propiedad de MSBuild (`$(X)`) o un rango (`[1.0,2.0)`) queda fuera.
-- **RubyGems**: los grupos `:development` y `:test` cuentan como desarrollo, también dentro de un bloque `platforms`. Una gema sin requisito no se reescribe: la sube Bundler. Las versiones de cuatro partes (`8.1.4.1`) se comparan completas.
-- **SwiftPM**: no hay registro central; un paquete es su URL de git. La última versión sale de `git ls-remote --tags` sobre el propio repositorio, sin pasar por la API de GitHub, así que no hay límite de consultas y sirve con cualquier host. Cuentan solo los tags de una versión final (sin `-beta`). Se leen todas las formas de requisito (`from:`, `.upToNextMajor`, `.upToNextMinor`, `exact:` y rangos `"1.0.0"..<"2.0.0"`); los de `branch:`, `revision:` o `path:` quedan fuera. Para buscar los imports se usa el nombre del repositorio sin `swift-` y sin distinguir mayúsculas (`swift-nio-ssl` encuentra `import NIOSSL`).
-- **Gradle wrapper**: solo cambia la versión en `gradle-wrapper.properties`; el `gradle-wrapper.jar` y los scripts se quedan hasta que ejecutes `./gradlew wrapper`. Un wrapper con `distributionSha256Sum` queda bloqueado, porque la suma también cambia. El wrapper de `android/` lo deciden React Native o Flutter y no se revisa. No pasa por la revisión de vulnerabilidades, porque OSV no lo conoce.
-- **GitHub Actions**: se leen las acciones fijadas a un tag completo (`@v6.1.0`) o a un commit con su versión en un comentario (`@b843ebf… # v6.1.0`). Un tag móvil (`@v6`) ya sigue su versión mayor, y una rama o un commit sin comentario no dicen qué comparar: quedan fuera. Si no se puede leer el commit de un tag nuevo, los workflows quedan como estaban. Subir cambios en `.github/workflows` por HTTPS exige un token con el permiso `workflow`.
-- **Bloqueadas aunque el salto sea pequeño**: una librería de Gradle que un `gradle.lockfile` fija en otra versión (también si la fija para otra librería que comparte su `version.ref`), porque un build con bloqueo la rechaza hasta regenerar el lock con `--write-locks`; y un paquete de Swift fijado a una versión exacta (`exact:`, `exactVersion`), porque suele ser una decisión a propósito. "Trivial" solo significa que el salto no es mayor y que no choca con lo que el panel sabe: no garantiza que el proyecto compile.
-- **Sin la herramienta en el equipo** (`xcodebuild` fuera de un Mac, `cargo` sin instalar): ese ecosistema no se actualiza, sus archivos quedan como estaban y el panel dice cuál fue; los demás siguen. Así no se sube un manifest con la versión nueva junto a un lockfile viejo.
-- **Expo, peerDependencies y versiones fijadas** se revisan solo en npm.
-- Las dependencias de ruta, de git o del workspace no se revisan, porque no vienen de un registro.
+- **Go**: a major version from v2 on is a different module path (`github.com/go-chi/chi/v5`). The pane asks for each next major until one does not exist, so `chi` 1.5.4 shows up with 5.5.0. That upgrade requires changing the imports, and the button does not do it.
+- **PyPI**: with only `requirements.txt` there is no lockfile, so the button rewrites the pins and installs nothing: install it yourself in your environment (`pip install -r requirements.txt`). The module name is used to search for imports (`PyYAML` is imported as `yaml`); some uncommon names may not be found.
+- **Gradle**: the version catalog is read exactly. A version shared by several libraries or plugins is a single row (`ktor (8)`, `kotlin (6)`) and the button upgrades it once. In `build.gradle(.kts)` files only coordinates written as text are read (`"io.mockk:mockk:1.13.10"`, `id("x") version "1.2"`): a version stored in a variable (`$kotlinVersion`) is code and is left out. A catalog version that no library or plugin uses is also left out, for example one that `build-logic` reads with `libs.versions.x`: with no coordinates there is no registry to ask. Only stable versions count: Maven's `<release>` can be an alpha (lifecycle `2.12.0-alpha05`), so the full list is checked.
+- **Maven**: `<dependency>` and `<plugin>` entries with their own version or a `${property}` from `<properties>` are read. A version managed by a parent POM or a BOM is left out.
+- **NuGet**: manifests are searched for across the whole tree (`src/Api/Api.csproj`). An analyzer (`PrivateAssets="all"`) counts as a development dependency. A version with an MSBuild property (`$(X)`) or a range (`[1.0,2.0)`) is left out.
+- **RubyGems**: the `:development` and `:test` groups count as development, also inside a `platforms` block. A gem with no requirement is not rewritten: Bundler upgrades it. Four-part versions (`8.1.4.1`) are compared in full.
+- **SwiftPM**: there is no central registry; a package is its git URL. The latest version comes from `git ls-remote --tags` on the repository itself, without going through the GitHub API, so there is no query limit and it works with any host. Only tags of a final version (without `-beta`) count. All requirement forms are read (`from:`, `.upToNextMajor`, `.upToNextMinor`, `exact:`, and `"1.0.0"..<"2.0.0"` ranges); those with `branch:`, `revision:`, or `path:` are left out. To search for imports, the repository name without `swift-` is used, ignoring case (`swift-nio-ssl` finds `import NIOSSL`).
+- **Gradle wrapper**: only the version in `gradle-wrapper.properties` changes; `gradle-wrapper.jar` and the scripts stay until you run `./gradlew wrapper`. A wrapper with `distributionSha256Sum` is blocked, because the checksum changes too. The `android/` wrapper is decided by React Native or Flutter and is not checked. It does not go through the vulnerability check, because OSV does not know it.
+- **Blocked even if the jump is small**: a Gradle library that a `gradle.lockfile` pins to another version (also if it pins it for another library that shares its `version.ref`), because a locked build rejects it until the lock is regenerated with `--write-locks`; and a Swift package pinned to an exact version (`exact:`, `exactVersion`), because it is usually a deliberate decision. "Trivial" only means the jump is not major and does not clash with what the pane knows: it does not guarantee that the project compiles.
+- **Without the tool on the machine** (`xcodebuild` outside a Mac, `cargo` not installed): that ecosystem is not upgraded, its files stay as they were, and the pane says which one it was; the others go ahead. That way a manifest with the new version is never pushed alongside an old lockfile.
+- **Expo, peerDependencies, and pinned versions** are only checked in npm.
+- Path, git, and workspace dependencies are not checked, because they do not come from a registry.
 
-## Instalación
+## Installation
 
-Necesitas [Claude Code](https://claude.com/claude-code). Dentro de Claude Code, ejecuta:
+You need [Claude Code](https://claude.com/claude-code). Inside Claude Code, run:
 
 ```
 /plugin marketplace add davshn/narsil-check
 /plugin install narsil-check@narsil-check
 ```
 
-El panel aparece en la siguiente conversación.
+The pane appears in the next conversation.
 
-Para actualizarlo a la última versión:
+To update to the latest version:
 
 ```
 /plugin marketplace update narsil-check
 /plugin update narsil-check@narsil-check
 ```
 
-Crear el PR necesita, además, [GitHub CLI](https://cli.github.com) (`gh`) instalado y con sesión iniciada.
+Creating the PR also needs [GitHub CLI](https://cli.github.com) (`gh`) installed and signed in.
 
-## Comandos
+## Commands
 
-| Comando | Qué hace |
+| Command | What it does |
 | --- | --- |
-| `/narsil-check` | Muestra la lista de revisiones. También responde así a un argumento que no conoce. |
-| `/narsil-check upgrade` | Abre el panel con **Actualizaciones** desplegada y vuelve a revisar. Es la forma de abrirlo de nuevo si lo cierras. |
-| `/narsil-check vulns` | Abre el panel con **Vulnerabilidades** desplegada y vuelve a consultar OSV.dev. |
-| `/narsil-check template "…"` | Le pide a Claude que cree una tarea, con su explicación, en **Pendientes** de una plantilla. |
+| `/narsil-check` | Shows the list of checks. It also answers this way to an argument it does not know. |
+| `/narsil-check upgrade` | Opens the pane with **Actualizaciones** expanded and checks again. It is the way to open it again if you close it. |
+| `/narsil-check vulns` | Opens the pane with **Vulnerabilidades** expanded and queries OSV.dev again. |
+| `/narsil-check template "…"` | Asks Claude to create a task, with its explanation, in a template's **Pendientes**. |
 
-## Sistemas compatibles
+## Supported systems
 
-Actualizaciones y Vulnerabilidades funcionan dondequiera que Claude Code dibuje el panel: terminal, app de escritorio, VS Code y app móvil. Entorno, Conectores y el control remoto se leen de los servidores propios de la app de escritorio:
+Upgrades and Vulnerabilities work wherever Claude Code draws the pane: terminal, desktop app, VS Code, and mobile app. Environment, Connectors, and remote control are read from the desktop app's own servers:
 
-| | App de escritorio | Terminal, VS Code y otros |
+| | Desktop app | Terminal, VS Code, and others |
 | --- | --- | --- |
-| Actualizaciones y Vulnerabilidades | Sí | Sí |
-| Entorno y Conectores | Sí | No: la sección dice por qué no pudo leerlos |
-| Control remoto y Auto-fix | Sí | No |
-| CI del PR | Sí, con `gh` instalado y con sesión iniciada; si falta, el pliegue dice por qué | No |
-| Clic en la carpeta y en la rama | Sí | No |
-| Pendientes | Sí | Sí; en la app móvil no hay campo para escribir: las tareas se añaden pidiéndoselo a Claude |
+| Upgrades and Vulnerabilities | Yes | Yes |
+| Environment and Connectors | Yes | No: the section says why it could not read them |
+| Remote control and Auto-fix | Yes | No |
+| The PR's CI | Yes, with `gh` installed and signed in; if it is missing, the fold says why | No |
+| Click on the folder and the branch | Yes | No |
+| Pending tasks | Yes | Yes; in the mobile app there is no field to type in: tasks are added by asking Claude |
 
-## Desarrollo
+## Development
 
-Narsil Check es de código abierto y las contribuciones son bienvenidas: abre un *issue* o un *pull request* en [GitHub](https://github.com/davshn/narsil-check).
+Narsil Check is open source and contributions are welcome: open an issue or a pull request on [GitHub](https://github.com/davshn/narsil-check).
 
-Para trabajar sobre una copia local, añade su carpeta como marketplace; los cambios llegan con `/reload-plugins`, sin reinstalar:
+To work on a local copy, add its folder as a marketplace; changes arrive with `/reload-plugins`, without reinstalling:
 
 ```
-claude plugin marketplace add <ruta-a-tu-copia>
+claude plugin marketplace add <path-to-your-copy>
 claude plugin validate .
 claude plugin test .
 ```
 
-- `hooks/register.tsx`: los hooks del mod (el panel, sus secciones, los botones y los comandos).
-- `hooks/words.ts`: cómo lo dice el panel (nombres de las secciones, colores, resúmenes, ayuda del comando).
-- `hooks/map/`: el mapa de trabajo, adaptado de lot-map (`classify.ts` reparte cada llamada en su estación, `board.ts` guarda lo que pasó, `hooks.ts` escucha los eventos y `draw.ts` dibuja el SVG animado).
-- `hooks/session.ts`: la sección de la sesión (Entorno, Conectores y los interruptores del control remoto y del Auto-fix).
-- `hooks/ci.ts`: el CI del PR paso a paso (los runs y pasos que da `gh`, sus marcas y el resumen del pliegue).
-- `hooks/todos.ts`: Pendientes (el archivo de la lista, el formato `nombre: contenido`, la exclusión de git y la búsqueda de plantillas).
-- `hooks/ecosystems.ts` y `hooks/adapter.ts`: la lista de ecosistemas y lo que cada uno tiene que saber hacer.
-- `hooks/npm.ts`, `pypi.ts`, `golang.ts`, `cargo.ts`, `pub.ts`, `maven.ts`, `nuget.ts`, `rubygems.ts` y `swiftpm.ts`: cada ecosistema (leer el manifest, preguntar al registro y reescribir la versión).
-- `hooks/semver.ts` y `hooks/toml.ts`: las versiones y los rangos, y la lectura de TOML.
-- `hooks/explain.ts`: el análisis de Haiku de cada versión mayor.
-- `hooks/osv.ts`: las vulnerabilidades de OSV.dev.
-- `hooks/git.ts`: la rama, el commit y el PR.
-- `hooks/narsil-art.ts`: el dibujo de Narsil bebé, claro y oscuro, generado a partir del arte de [Narsil](https://github.com/davshn/narsil-pet).
-- `tests/`: los tests.
+- `hooks/register.tsx`: the mod's hooks (the pane, its sections, the buttons, and the commands).
+- `hooks/words.ts`: how the pane says things (section names, colors, summaries, the command's help).
+- `hooks/map/`: the work map, adapted from lot-map (`classify.ts` assigns each call to its station, `board.ts` keeps what happened, `hooks.ts` listens to the events, and `draw.ts` draws the animated SVG).
+- `hooks/session.ts`: the session section (Environment, Connectors, and the remote control and Auto-fix switches).
+- `hooks/ci.ts`: the PR's CI step by step (the runs and steps `gh` returns, their marks, and the fold's summary).
+- `hooks/todos.ts`: Pending tasks (the list file, the `name: body` format, the git exclusion, and the template search).
+- `hooks/ecosystems.ts` and `hooks/adapter.ts`: the list of ecosystems and what each one has to know how to do.
+- `hooks/npm.ts`, `pypi.ts`, `golang.ts`, `cargo.ts`, `pub.ts`, `maven.ts`, `nuget.ts`, `rubygems.ts`, and `swiftpm.ts`: each ecosystem (reading the manifest, asking the registry, and rewriting the version).
+- `hooks/semver.ts` and `hooks/toml.ts`: versions and ranges, and TOML parsing.
+- `hooks/explain.ts`: Haiku's analysis of each major version.
+- `hooks/osv.ts`: the OSV.dev vulnerabilities.
+- `hooks/git.ts`: the branch, the commit, and the PR.
+- `hooks/narsil-art.ts`: baby Narsil's drawing, light and dark, generated from [Narsil](https://github.com/davshn/narsil-pet)'s art.
+- `tests/`: the tests.
 
-## Licencia
+## License
 
-Narsil Check es software libre: puedes redistribuirlo y modificarlo bajo los términos de la [Licencia Pública General de GNU, versión 3](LICENSE) (GPL v3) o, a tu elección, cualquier versión posterior, publicada por la Free Software Foundation.
+Narsil Check is free software: you can redistribute it and modify it under the terms of the [GNU General Public License, version 3](LICENSE) (GPL v3) or, at your option, any later version, as published by the Free Software Foundation.
 
-En resumen: puedes usarlo, estudiarlo, modificarlo y compartirlo libremente, pero si distribuyes una versión modificada debes publicarla también como código abierto bajo la misma licencia. Se distribuye sin ninguna garantía. Consulta el archivo [LICENSE](LICENSE) para ver el texto completo.
+In short: you can use, study, modify, and share it freely, but if you distribute a modified version you must also publish it as open source under the same license. It comes with no warranty. See the [LICENSE](LICENSE) file for the full text.
 
 Copyright © 2026 Davshn
 
-El mapa de trabajo (`hooks/map/`) adapta código de [lot-map](https://github.com/alexeyw/lot-map), Copyright © 2026 Aleksei Volodin, publicado bajo la licencia MIT. Su aviso de copyright y de permiso está en [hooks/map/LICENSE-lot-map.txt](hooks/map/LICENSE-lot-map.txt).
+The work map (`hooks/map/`) adapts code from [lot-map](https://github.com/alexeyw/lot-map), Copyright © 2026 Aleksei Volodin, released under the MIT license. Its copyright and permission notice is in [hooks/map/LICENSE-lot-map.txt](hooks/map/LICENSE-lot-map.txt).
