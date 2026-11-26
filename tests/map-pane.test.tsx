@@ -2,6 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import { BACKGROUND_MAX_MS, expired, kept } from '../hooks/map/board'
+import { MAP_SIZE } from '../hooks/map/draw'
 import { PALETTE } from '../hooks/words'
 import type { MapEntry } from '../types'
 
@@ -25,8 +26,27 @@ async function map($: Engine) {
   const panel = await ui.find({ type: 'Box', key: 'panel-map' })
   await ui.unmount()
   const source = String(svg?.props.source)
-  return { alt: String(svg?.props.alt), source, tone: panel?.props.borderColor, dots: source.split('font-weight="700"').length - 1 }
+  return {
+    alt: String(svg?.props.alt),
+    source,
+    size: { width: svg?.props.width, height: svg?.props.height },
+    tone: panel?.props.borderColor,
+    dots: source.split('font-weight="700"').length - 1,
+  }
 }
+
+test('the map keeps one fixed size across redraws, so a new drawing never moves the pane scroll', async ($, on) => {
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('clock.sleep', () => ({ value: undefined }))
+  on('tool.call', () => ({ result: {} }))
+
+  const idle = await map($)
+  await $.tool.call({ tool: 'Read', file_path: '/p/a.ts' })
+  const busy = await map($)
+  expect(busy.source).not.toBe(idle.source)
+  expect(idle.size).toEqual(MAP_SIZE)
+  expect(busy.size).toEqual(MAP_SIZE)
+})
 
 test('a refused call turns the map red with a dot on its station, and the next message clears it', async ($, on) => {
   on('clock.now', () => ({ value: 1_000_000 }))

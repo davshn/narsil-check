@@ -80,6 +80,11 @@ const W = 460
 const H = 476
 /** Height over width of the drawing, for a surface that sizes it itself. */
 export const MAP_ASPECT = H / W
+/**
+ * The CSS pixels the pane gives the map. A fixed box keeps the pane's height while a new drawing loads: without it the
+ * desktop's image is briefly empty on each redraw, and the pane's scroll is clamped back toward the top.
+ */
+export const MAP_SIZE = { width: W, height: H }
 const CX = 230
 const CY = 232
 const RX = 176

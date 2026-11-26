@@ -67,7 +67,7 @@ import { TODO_FILE, TOOL_ADD, TOOL_DONE, TOOL_LIST, TOOL_TEMPLATE, damagedPath, 
 import { COMMAND, COMMAND_HELP, GROUPS, HEALTH_SIZE, PALETTE, PANE, TITLE, agoLabel, auditSummary, behindNote, commandHelp, groupLabel, healthOf, healthSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, skippedNote, sortUpgrades, summaryOf, tail } from './words'
 import type { SkippedEcosystem } from './words'
 import { readBoard } from './map/board'
-import { describeMap, drawMap } from './map/draw'
+import { MAP_SIZE, describeMap, drawMap } from './map/draw'
 import { mapToolCall, mapTurnComplete, mapTurnStart, registerMap, resetMap } from './map/hooks'
 import { narsilFor } from './map/narsil'
 import { mapLabel, mapTone } from './map/words'
@@ -1595,7 +1595,7 @@ export const register: Register = on => {
           </Box>
           {mapOpen ? (
             <Box key="map" flexDirection="row" justifyContent="center">
-              <Svg source={drawMap(board, now, narsilFor(board))} alt={describeMap(board)} />
+              <Svg source={drawMap(board, now, narsilFor(board))} alt={describeMap(board)} width={MAP_SIZE.width} height={MAP_SIZE.height} />
             </Box>
           ) : null}
         </Box>
