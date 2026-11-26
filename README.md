@@ -9,7 +9,7 @@
 >
 > A free workshop, in English, Spanish, Italian, French, and Brazilian Portuguese, that teaches step by step how to build Claude Code mods like [Narsil](https://github.com/davshn/narsil-pet) and Narsil Check, and how to build a Narsil desk bot with a body: an ESP32-P4 touch screen in the belly and a holographic ESP32-S3 head, which talks through Xiaozhi and Claude on your own server and shows your GitHub pull requests and the Narsil status. No sign-up, no analytics, and it never asks for tokens or keys.
 
-Narsil Check is the companion of [Narsil](https://github.com/davshn/narsil-pet): a side pane, in her same colors, that checks the project you are working on. It shows an animated map of what Claude is doing, the session environment (repository, folder, branch, connectors, remote control, and Auto-fix), which libraries can be upgraded and how much effort it takes, which known vulnerabilities the installed packages have, and a list of the project's pending tasks. With it you can hide the desktop app's session bar and keep a single pane.
+Narsil Check is the companion of [Narsil](https://github.com/davshn/narsil-pet): a side pane, in her same colors, that checks the project you are working on. It shows an animated map of what Claude is doing, the session environment (repository, folder, branch, connectors, remote control, and Auto-fix), which libraries can be upgraded and how much effort it takes, and which known vulnerabilities the installed packages have. With it you can hide the desktop app's session bar and keep a single pane.
 
 It reads JavaScript and TypeScript (npm and Expo), Python (PyPI), Go, Rust (Cargo), Dart or Flutter (Pub), Kotlin and Java (Gradle and Maven), C# (NuGet), Ruby (RubyGems), and Swift (SwiftPM) projects.
 
@@ -32,7 +32,7 @@ It is an **open source** Claude Code mod, released under the [GPL v3](#license) 
 ### The pane
 The pane opens when each session starts, even if there is nothing to check. At the top, centered, is the title **● Narsil Check**, and then each check as a section that collapses and expands with its header (`▾ Actualizaciones · 3` / `▸ Actualizaciones · 3`). Each section's colored dot shows the most urgent thing in it, with Narsil's palette: red if something is blocking or failing, yellow if something is waiting for you, green if it is up to date, and blue for information.
 
-Every session starts the same way: **Mapa mental** (work map) and **Entorno** (environment) expanded, **Conectores** (connectors) collapsed, and **Actualizaciones** (upgrades), **Vulnerabilidades** (vulnerabilities), and **Pendientes** (pending tasks) collapsed until they have something, at which point they expand on their own.
+Every session starts the same way: **Mapa mental** (work map) and **Entorno** (environment) expanded, **Conectores** (connectors) collapsed, and **Actualizaciones** (upgrades) and **Vulnerabilidades** (vulnerabilities) collapsed until they have something, at which point they expand on their own.
 
 Inside **Actualizaciones** and **Vulnerabilidades**, each group (**Bloqueada** (blocked), **Versión mayor** (major version), **Crítica** (critical), **Alta** (high)...) also collapses with its own header (`▾ Bloqueada (2)` / `▸ Bloqueada (2)`), and the pane remembers which ones you closed. A click on a library or a vulnerability copies it to the clipboard: the library with its jump and what blocks it or Haiku's reasoning, and the vulnerability with its severity, the fix, and the OSV link.
 
@@ -186,37 +186,6 @@ The **Vulnerabilidades** section lists the known vulnerabilities of the project'
 
 The number of vulnerabilities is the number of advisories, not of packages: `npm audit` also counts the packages that only depend on a vulnerable one, which are not repeated here.
 
-### Pending tasks
-A project task list to jot down what comes to mind while you work on something else. Each task has a name and, if you want, a body:
-
-```
-▾ Pendientes · 2
-  ○ ▾ Subir TypeScript a 7.0.0
-       En narsil-check hubo que cambiar moduleResolution a bundler…
-  ○ Revisar el README
-  [ Nueva tarea (nombre: contenido) ]
-```
-
-- **Add**: type in the field and press Enter. What comes after the first colon is the body (`Upgrade TypeScript: check the types`); with no colon, the task only has a name.
-- **Read**: a click on the name shows or hides the body. A task with no body does not expand.
-- **Finish**: a click on `○` removes it from the list. No history of finished tasks is kept.
-- **With Claude**: Claude has its own tools to list, add, and finish tasks (`todo_list`, `todo_add`, `todo_done`). Ask it "add to pending tasks…" or "do the task about…", and it checks the task off itself when it is done. It does not read them on every message, so they use no context until it uses them.
-
-The list is saved in `.atl/narsil-check/pendientes.json`, inside the project. The first time, the pane adds that folder to `.git/info/exclude`, git's local list of ignored files: it never goes into a commit and does not touch your `.gitignore`. If that file cannot be written, the task is saved anyway.
-
-It is read when the session starts and written with each change. Within a session, changes go one at a time and each one reads the file again right before writing it, so you can add or finish tasks while Claude works, and a task another session saved earlier is not lost. What is not protected is two sessions of the same project writing at the very same moment: then the last change may overwrite the other.
-
-If the file gets corrupted (for example, after editing it by hand with a mistake), the pane does not treat it as an empty list: it leaves it as it is and says it cannot be read. On the next change it saves a copy next to it (`pendientes.danado-<date>.json`) and starts a new list, so nothing is lost.
-
-#### Tasks for a template
-When you do something in a project that is also worth doing in the template it came from (for example, a tricky upgrade), tell Claude with:
-
-```
-/narsil-check template "in backendTemplate create the task to upgrade TypeScript to 7.0.0, explain what you had to do"
-```
-
-Claude looks for the template's folder next to this project (ignoring case, hyphens, and spaces; it also accepts an absolute path), writes the explanation, because it knows how it was done, and creates the task in the template's **Pendientes** with the `todo_add_to_template` tool. If it cannot find the folder or there are several similar ones, it asks you which one.
-
 ## Ecosystems
 
 | Ecosystem | Reads | Installed version | Registry | The button runs |
@@ -275,7 +244,6 @@ Creating the PR also needs [GitHub CLI](https://cli.github.com) (`gh`) installed
 | `/narsil-check` | Shows the list of checks. It also answers this way to an argument it does not know. |
 | `/narsil-check upgrade` | Opens the pane with **Actualizaciones** expanded and checks again. It is the way to open it again if you close it. |
 | `/narsil-check vulns` | Opens the pane with **Vulnerabilidades** expanded and queries OSV.dev again. |
-| `/narsil-check template "…"` | Asks Claude to create a task, with its explanation, in a template's **Pendientes**. |
 
 ## Supported systems
 
@@ -288,7 +256,6 @@ Upgrades and Vulnerabilities work wherever Claude Code draws the pane: terminal,
 | Remote control and Auto-fix | Yes | No |
 | The PR's CI | Yes, with `gh` installed and signed in; if it is missing, the fold says why | No |
 | Click on the folder and the branch | Yes | No |
-| Pending tasks | Yes | Yes; in the mobile app there is no field to type in: tasks are added by asking Claude |
 
 ## Development
 
@@ -307,7 +274,6 @@ claude plugin test .
 - `hooks/map/`: the work map, adapted from lot-map (`classify.ts` assigns each call to its station, `board.ts` keeps what happened, `hooks.ts` listens to the events, and `draw.ts` draws the animated SVG).
 - `hooks/session.ts`: the session section (Environment, Connectors, and the remote control and Auto-fix switches).
 - `hooks/ci.ts`: the PR's CI step by step (the runs and steps `gh` returns, their marks, and the fold's summary).
-- `hooks/todos.ts`: Pending tasks (the list file, the `name: body` format, the git exclusion, and the template search).
 - `hooks/ecosystems.ts` and `hooks/adapter.ts`: the list of ecosystems and what each one has to know how to do.
 - `hooks/npm.ts`, `pypi.ts`, `golang.ts`, `cargo.ts`, `pub.ts`, `maven.ts`, `nuget.ts`, `rubygems.ts`, and `swiftpm.ts`: each ecosystem (reading the manifest, asking the registry, and rewriting the version).
 - `hooks/semver.ts` and `hooks/toml.ts`: versions and ranges, and TOML parsing.

@@ -133,13 +133,6 @@ export type CiJob = CiStep & { steps: CiStep[] }
 export type CiRun = { id: number; name: string; status: string; conclusion: string; jobs: CiJob[] }
 export type CiView = { status: 'idle' | 'loading' | 'ready'; runs: CiRun[]; isWaiting?: boolean; error?: string }
 
-// A pending task: a name, and optionally what it is about. The list lives in
-// the project's untracked .atl/narsil-check/pendientes.json.
-export type Task = { id: string; name: string; content?: string }
-// `error`: the file cannot be read (it is left as it is until a change, which
-// keeps a copy first). `notice`: what a change did about it.
-export type Todos = { isLoaded: boolean; tasks: Task[]; error?: string; notice?: string }
-
 // The work map, ported from lot-map (https://github.com/alexeyw/lot-map, MIT):
 // one station per kind of work, and what Claude did on each this session.
 export type StationId =
@@ -199,9 +192,6 @@ declare module 'claude-code' {
       isConnectorsOpen: Shaped<boolean>
       ci: Shaped<CiView>
       isCiOpen: Shaped<boolean>
-      todos: Shaped<Todos>
-      isTodosOpen: Shaped<boolean>
-      openTodos: Shaped<string[]>
       // The upgrade groups and vulnerability severities folded shut, by key
       // (`upgrade-blocked`, `vulns-high`): every one starts open.
       closedGroups: Shaped<string[]>
