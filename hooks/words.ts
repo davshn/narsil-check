@@ -7,12 +7,12 @@ import { SEVERITIES, SEVERITY_TITLE, worstOf } from './osv'
 export const PANE = 'narsil-check'
 export const TITLE = 'Narsil Check'
 export const COMMAND = 'narsil-check'
-export const COMMAND_HELP = 'Narsil Check, revisiones del proyecto: upgrade | vulns | template "…"'
+export const COMMAND_HELP = 'Narsil Check, revisiones del proyecto: upgrade | vulns'
 
 // What /narsil-check says to anything but a check it knows.
 export function commandHelp(arg: string): string {
   const known =
-    '/narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas. /narsil-check template "…": una tarea en Pendientes de una plantilla.'
+    '/narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas.'
   return arg ? `Narsil Check: no conozco "${arg}". Revisiones: ${known}` : `Narsil Check: revisiones del proyecto. ${known}`
 }
 
@@ -235,7 +235,7 @@ export async function pool<T, R>(items: T[], limit: number, fn: (item: T) => Pro
 // nothing.
 export type Health = { label: string; count: number; color: string }
 
-export function healthOf(scan: Scan, audit: Audit, tasks: number): Health[] {
+export function healthOf(scan: Scan, audit: Audit): Health[] {
   const upgrades = scan.status === 'done' ? scan.upgrades : []
   const vulns = audit.status === 'done' ? audit.findings.reduce((n, f) => n + f.vulns.length, 0) : 0
   const count = (group: Group) => upgrades.filter(u => u.group === group).length
@@ -245,7 +245,6 @@ export function healthOf(scan: Scan, audit: Audit, tasks: number): Health[] {
     { label: count('review') === 1 ? 'mayor' : 'mayores', count: count('review'), color: PALETTE.waiting },
     { label: 'de Expo', count: count('expo'), color: PALETTE.info },
     { label: count('bump') === 1 ? 'trivial' : 'triviales', count: count('bump'), color: PALETTE.done },
-    { label: tasks === 1 ? 'pendiente' : 'pendientes', count: tasks, color: PALETTE.muted },
   ]
   return parts.filter(p => p.count > 0)
 }

@@ -61,9 +61,8 @@ import {
   parseSession,
   textOf,
 } from './session'
-import type { CiRun, CiView, Remote, SessionView, Task, Todos } from '../types'
+import type { CiRun, CiView, Remote, SessionView } from '../types'
 import { CI_POLL_MS, CI_WAIT_POLLS, ciLabel, ciMark, isGoing, jobsOf, latestRuns, markOf, runListArgv, runViewArgv } from './ci'
-import { TODO_FILE, TOOL_ADD, TOOL_DONE, TOOL_LIST, TOOL_TEMPLATE, damagedPath, findTask, newTask, parseEntry, parseTodoFile, serializeTodos, templateArg, templateMatches, templatePrompt, todosColor, todosLabel, todosText, withExclude } from './todos'
 import { COMMAND, COMMAND_HELP, GROUPS, HEALTH_SIZE, PALETTE, PANE, TITLE, agoLabel, auditSummary, behindNote, commandHelp, groupLabel, healthOf, healthSvg, upgradeLine, sectionColor, sectionLabel, SEVERITY_COLOR, vulnsColor, vulnsLabel, failedNote, heldNote, jobNote, pendingLabel, pool, prNote, publishLabel, pullSummary, reasonLine, skippedNote, sortUpgrades, summaryOf, tail } from './words'
 import type { SkippedEcosystem } from './words'
 import { readBoard } from './map/board'
@@ -101,12 +100,8 @@ const SESSION_MS = 15_000
 const ci = atom({ plugin: 'narsil-check', key: 'ci' } as const, { status: 'idle', runs: [] } as CiView, { shape: 'ci-1' })
 const isCiOpen = atom({ plugin: 'narsil-check', key: 'isCiOpen' } as const, true, { shape: 'open-1' })
 const GH_MS = 30_000
-// Pendientes: the list, whether it is unfolded, and the tasks whose content shows.
-const todos = atom({ plugin: 'narsil-check', key: 'todos' } as const, { isLoaded: false, tasks: [] } as Todos, { shape: 'todos-2' })
-const isTodosOpen = atom({ plugin: 'narsil-check', key: 'isTodosOpen' } as const, false, { shape: 'open-1' })
 // Whether the work map is open; open at each session start.
 const isMapOpen = atom({ plugin: 'narsil-check', key: 'isMapOpen' } as const, true, { shape: 'open-1' })
-const openTodos = atom({ plugin: 'narsil-check', key: 'openTodos' } as const, [] as string[], { shape: 'ids-1' })
 
 // Haiku reads each major jump once: its reading is kept in the store for good.
 const EXPLAIN_CONCURRENCY = 2
@@ -1233,171 +1228,12 @@ async function openTerminal($: EngineInterface, view: SessionView): Promise<void
   }
 }
 
-// The project's root, where its list lives: git's top level, else the
-// session's folder. Forward slashes, so a path joins the same on any system.
-async function projectRoot($: EngineInterface, cwd?: string): Promise<string> {
-  const top = await $.process
-    .run(['git', 'rev-parse', '--show-toplevel'], { timeoutMs: GIT_MS, ...(cwd ? { cwd } : {}) })
-    .then(r => (r.exitCode === 0 ? r.stdout.trim() : ''))
-    .catch(() => '')
-  const root = top || cwd || (await $.session.cwd().catch(() => '.'))
-  return root.replace(/\\/g, '/').replace(/\/$/, '')
-}
-
-// Keeps a project's list out of git through its local exclude file; a folder
-// that is no repository has nothing to keep it out of.
-async function excludeTodos($: EngineInterface, root: string): Promise<void> {
-  const ran = await $.process.run(['git', 'rev-parse', '--git-path', 'info/exclude'], { timeoutMs: GIT_MS, cwd: root }).catch(() => undefined)
-  if (!ran || ran.exitCode !== 0) return
-  const rel = ran.stdout.trim().replace(/\\/g, '/')
-  const path = /^([A-Za-z]:)?\//.test(rel) ? rel : `${root}/${rel}`
-  const text = (await $.fs.exists(path)) ? await $.fs.read(path) : ''
-  const next = withExclude(text)
-  if (next !== undefined) await $.fs.write(path, next)
-}
-
-// A list file as it stands: its tasks, or why it cannot be read and its text.
-async function readTodoFile($: EngineInterface, root: string): Promise<{ tasks: Task[] } | { error: string; text: string }> {
-  const path = `${root}/${TODO_FILE}`
-  if (!(await $.fs.exists(path))) return { tasks: [] }
-  const text = await $.fs.read(path)
-  const file = parseTodoFile(text)
-  return 'error' in file ? { error: file.error, text } : file
-}
-
-// What the pane says about a list it cannot read: it is left untouched.
-const unreadable = (error: string) =>
-  `${TODO_FILE} no se puede leer (${error}). No lo toco: corrígelo, o añade una tarea y guardaré una copia del archivo antes de empezar una lista nueva.`
-
-// One change to a list at a time within this session, each on the file as it
-// stands now. A damaged file is copied aside before a new list replaces it,
-// so no task is lost to it. Keeping the list out of git is a side concern:
-// its failure never stops the save.
-let todoChain: Promise<unknown> = Promise.resolve()
-
-function changeTodos<T>($: EngineInterface, root: string, fn: (tasks: Task[]) => { tasks: Task[]; value: T }): Promise<{ value: T; notice?: string }> {
-  const run = todoChain.then(async () => {
-    const file = await readTodoFile($, root)
-    let notice: string | undefined
-    if ('error' in file) {
-      const copy = damagedPath(Date.now())
-      await $.fs.write(`${root}/${copy}`, file.text)
-      notice = `${TODO_FILE} estaba dañado (${file.error}): guardé una copia en ${copy} y empecé una lista nueva.`
-    }
-    const { tasks, value } = fn('error' in file ? [] : file.tasks)
-    await excludeTodos($, root).catch(() => undefined)
-    await $.fs.write(`${root}/${TODO_FILE}`, serializeTodos(tasks))
-    if (root === (await projectRoot($))) await update($, todos, () => ({ isLoaded: true, tasks, ...(notice ? { notice } : {}) }))
-    return notice ? { value, notice } : { value }
-  })
-  todoChain = run.catch(() => undefined)
-  return run
-}
-
-async function loadTodos($: EngineInterface): Promise<Task[]> {
-  try {
-    const file = await readTodoFile($, await projectRoot($))
-    if ('error' in file) {
-      await update($, todos, () => ({ isLoaded: true, tasks: [], error: unreadable(file.error) }))
-      return []
-    }
-    await update($, todos, () => ({ isLoaded: true, tasks: file.tasks }))
-    return file.tasks
-  } catch (err) {
-    await update($, todos, () => ({ isLoaded: true, tasks: [], error: `No pude leer ${TODO_FILE}: ${errorText(err)}` }))
-    return []
-  }
-}
-
-async function addTodo($: EngineInterface, name: string, content?: string, root?: string): Promise<{ value: Task; notice?: string }> {
-  const task = newTask(name, content, Date.now(), Math.random())
-  return changeTodos($, root ?? (await projectRoot($)), tasks => ({ tasks: [...tasks, task], value: task }))
-}
-
-async function finishTodo($: EngineInterface, ref: string): Promise<{ value: Task | undefined; notice?: string }> {
-  return changeTodos($, await projectRoot($), tasks => {
-    const done = findTask(tasks, ref)
-    return { tasks: done ? tasks.filter(t => t !== done) : tasks, value: done }
-  })
-}
-
-// The folder a template's name points to: an absolute path as given, else a
-// folder beside this project. Says why when there is none or several.
-async function templateDir($: EngineInterface, template: string): Promise<{ dir: string } | { error: string }> {
-  const given = template.trim().replace(/\\/g, '/').replace(/\/$/, '')
-  if (/^([A-Za-z]:)?\//.test(given)) return (await $.fs.exists(given)) ? { dir: given } : { error: `No folder at ${given}.` }
-  const root = await projectRoot($)
-  const parent = root.replace(/\/[^/]+$/, '')
-  const entries = await $.fs.list(parent).catch(() => undefined)
-  if (!entries) return { error: `Could not list ${parent}. Ask the user for the template's absolute path.` }
-  const folders = entries.filter(f => f.kind === 'dir').map(f => f.name)
-  const found = templateMatches(folders, given)
-  if (found.length === 1) return { dir: `${parent}/${found[0]}` }
-  if (found.length === 0) return { error: `No folder named like "${given}" in ${parent}. Ask the user which template it is.` }
-  return { error: `Several folders in ${parent} match "${given}": ${found.join(', ')}. Ask the user which one.` }
-}
-
-// A tool's answer as the engine takes it from a tool.call hook: the text as
-// the result, or, for an error, as a refusal the model reads as an error
-// result. An MCP-style { content, isError } object is refused by the engine.
-type ToolAnswer = { result: string } | { deny: string }
-const toolText = (text: string, isError = false): ToolAnswer => (isError ? { deny: text } : { result: text })
-
-// A tool's answer, with any failure on the way (a file that cannot be read or
-// written) turned into an error Claude can read and tell the user about.
-async function answered(fn: () => Promise<ToolAnswer>): Promise<ToolAnswer> {
-  try {
-    return await fn()
-  } catch (err) {
-    return toolText(`The Pendientes list could not be changed: ${errorText(err)}`, true)
-  }
-}
-
-const withNotice = (text: string, notice?: string) => (notice ? `${text} Note for the user: ${notice}` : text)
-
-// Claude's tools over the list: behind ToolSearch, so they cost nothing
-// until used. A failure here leaves the rest of the pane untouched.
-async function registerTools($: EngineInterface): Promise<void> {
-  await $.tool.register({
-    name: TOOL_LIST,
-    description: "List this project's pending tasks (the Narsil Check pane's Pendientes): id, name and content of each.",
-  })
-  await $.tool.register({
-    name: TOOL_ADD,
-    description: "Add a task to this project's Pendientes list in the Narsil Check pane. Use it when the user asks to note something to do later.",
-    inputSchema: { type: 'object', properties: { name: { type: 'string', description: 'Short task name' }, content: { type: 'string', description: 'Optional details' } }, required: ['name'] },
-  })
-  await $.tool.register({
-    name: TOOL_DONE,
-    description: "Remove a finished task from this project's Pendientes list. Call it when you complete a task that is on the list.",
-    inputSchema: { type: 'object', properties: { task: { type: 'string', description: 'The task id, or its exact name' } }, required: ['task'] },
-  })
-  await $.tool.register({
-    name: TOOL_TEMPLATE,
-    description: "Add a task to the Pendientes list of another project, usually the template this project was created from (e.g. backendTemplate). `template` is that project's folder name (a folder beside this project) or its absolute path.",
-    inputSchema: {
-      type: 'object',
-      properties: {
-        template: { type: 'string', description: 'Folder name beside this project, or absolute path' },
-        name: { type: 'string', description: 'Short task name' },
-        content: { type: 'string', description: 'What to do and how it was done here: changes, files, problems and fixes' },
-      },
-      required: ['template', 'name'],
-    },
-  })
-}
-
 export const register: Register = on => {
   // The work map listens first: every hook of its own passes its event on unchanged.
   registerMap(on)
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: COMMAND, description: COMMAND_HELP, argumentHint: 'upgrade | vulns | template "…"' })
-    void registerTools($).catch(() => undefined)
-    // Pendientes opens when it holds something.
-    void loadTodos($)
-      .then(tasks => update($, isTodosOpen, () => tasks.length > 0))
-      .catch(() => undefined)
+    await $.command.register({ name: COMMAND, description: COMMAND_HELP, argumentHint: 'upgrade | vulns' })
     // Every session starts the same: Mapa and Entorno open, Conectores folded,
     // and Actualizaciones and Vulnerabilidades folded until they find something.
     resetMap()
@@ -1467,55 +1303,7 @@ export const register: Register = on => {
 
   // /narsil-check <check>, as /narsil <option>: each check by name, and the
   // list of them for anything else.
-  on('tool.call', { tool: `mcp__narsil-check__${TOOL_LIST}` }, async $ =>
-    answered(async () => {
-      const file = await readTodoFile($, await projectRoot($))
-      return 'error' in file ? toolText(`${TODO_FILE} cannot be read (${file.error}). Tell the user; a change will keep a copy of it and start a new list.`, true) : toolText(todosText(file.tasks))
-    }),
-  )
-
-  on('tool.call', { tool: `mcp__narsil-check__${TOOL_ADD}` }, async ($, e) =>
-    answered(async () => {
-      const input = e as unknown as { name?: unknown; content?: unknown }
-      if (typeof input.name !== 'string' || !input.name.trim()) return toolText('A task needs a name.', true)
-      const { value: task, notice } = await addTodo($, input.name, typeof input.content === 'string' ? input.content : undefined)
-      return toolText(withNotice(`Added [${task.id}] ${task.name}.`, notice))
-    }),
-  )
-
-  on('tool.call', { tool: `mcp__narsil-check__${TOOL_DONE}` }, async ($, e) =>
-    answered(async () => {
-      const ref = (e as unknown as { task?: unknown }).task
-      if (typeof ref !== 'string' || !ref.trim()) return toolText('Name the task by its id or name.', true)
-      const { value: done, notice } = await finishTodo($, ref)
-      return done ? toolText(withNotice(`Removed [${done.id}] ${done.name}.`, notice)) : toolText(withNotice(`No pending task "${ref}". Call ${TOOL_LIST} to see them.`, notice), true)
-    }),
-  )
-
-  on('tool.call', { tool: `mcp__narsil-check__${TOOL_TEMPLATE}` }, async ($, e) =>
-    answered(async () => {
-      const input = e as unknown as { template?: unknown; name?: unknown; content?: unknown }
-      if (typeof input.template !== 'string' || !input.template.trim()) return toolText('Name the template folder.', true)
-      if (typeof input.name !== 'string' || !input.name.trim()) return toolText('A task needs a name.', true)
-      const found = await templateDir($, input.template)
-      if ('error' in found) return toolText(found.error, true)
-      const { value: task, notice } = await addTodo($, input.name, typeof input.content === 'string' ? input.content : undefined, found.dir)
-      return toolText(withNotice(`Added [${task.id}] ${task.name} to ${found.dir}/${TODO_FILE}.`, notice))
-    }),
-  )
-
   on('command.run', { command: COMMAND }, async ($, e) => {
-    // /narsil-check template "<text>": Claude finds the template and writes
-    // the task, since only Claude knows how the work here was done.
-    const request = templateArg(e.args)
-    if (request !== undefined) {
-      if (!request) return { text: 'Narsil Check: escribe la tarea entre comillas, por ejemplo /narsil-check template "en backendTemplate crea la tarea de actualizar TypeScript a 7.0.0, explica lo que hicimos".' }
-      void $.clock
-        .sleep(0)
-        .then(() => $.prompt.submit({ text: templatePrompt(request) }))
-        .catch(err => $.ui.toast(`No pude pasarle la tarea a Claude: ${errorText(err)}`))
-      return { text: 'Narsil Check: le paso la tarea a Claude para la plantilla.' }
-    }
     const arg = e.args.trim().toLowerCase().replace(/\s+/g, ' ')
     if (arg === 'upgrade') {
       await update($, isUpgradeOpen, () => true)
@@ -1537,8 +1325,6 @@ export const register: Register = on => {
     const { Box, Text, Button, Link } = elements
     // The terminal draws no SVG: baby Narsil shows on the other surfaces.
     const Svg = 'Svg' in elements ? elements.Svg : undefined
-    // The mobile app draws no text field: there tasks are added through Claude.
-    const Input = e.surface !== 'mobile' && 'Input' in elements ? elements.Input : undefined
     const state = await read($, scan)
     const work = await read($, job)
     const waiting = await read($, pending)
@@ -1833,67 +1619,6 @@ export const register: Register = on => {
       )
     })()
 
-    // Pendientes, last: ○ finishes a task, its name shows or hides its content,
-    // and the field adds one as "nombre: contenido".
-    const list = await read($, todos)
-    const todosOpen = await read($, isTodosOpen)
-    const shown = new Set(await read($, openTodos))
-    const toggleTodos = async () => {
-      const open = await update($, isTodosOpen, value => !value)
-      if (open) await loadTodos($)
-    }
-    const toggleTask = (id: string) => update($, openTodos, ids => (ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id]))
-    const finish = async (id: string) => {
-      await finishTodo($, id).catch(err => $.ui.toast(`No pude guardar Pendientes: ${errorText(err)}`))
-      await update($, openTodos, ids => ids.filter(i => i !== id))
-    }
-    const add = async (text: string) => {
-      const entry = parseEntry(text)
-      if (!entry) return
-      await addTodo($, entry.name, entry.content).catch(err => $.ui.toast(`No pude guardar Pendientes: ${errorText(err)}`))
-    }
-    const todosSection = (
-      <Box key="panel-todos" {...panel(todosColor(list.tasks.length))}>
-        <Box flexDirection="row" gap={1}>
-          <Text bold color={todosColor(list.tasks.length)}>
-            ●
-          </Text>
-          <Button key="section-todos" plain label={todosLabel(todosOpen, list.tasks.length)} onPress={toggleTodos} />
-        </Box>
-        {todosOpen && (
-          <Box flexDirection="column">
-            {list.error && <Text color={PALETTE.error}>{list.error}</Text>}
-            {list.notice && <Text color={PALETTE.waiting}>{list.notice}</Text>}
-            {list.tasks.map(t => (
-              <Box key={`row-todo-${t.id}`} flexDirection="column" paddingX={isRich ? 1 : 0}>
-                <Box flexDirection="row" gap={1}>
-                  <Button key={`todo-done-${t.id}`} plain label="○" onPress={() => finish(t.id)} />
-                  {t.content ? (
-                    <Button key={`todo-${t.id}`} plain label={`${shown.has(t.id) ? '▾' : '▸'} ${t.name}`} onPress={() => toggleTask(t.id)} />
-                  ) : (
-                    <Text>{t.name}</Text>
-                  )}
-                </Box>
-                {t.content && shown.has(t.id) && (
-                  <Box marginLeft={4}>
-                    <Text dimColor>{t.content}</Text>
-                  </Box>
-                )}
-              </Box>
-            ))}
-            {Input && (
-              // A row of space from the list when there is one, so the field
-              // does not read as one more task.
-              <Box key="todo-form" marginTop={list.tasks.length > 0 ? 1 : 0}>
-                <Input key="todo-new" placeholder="Nueva tarea (nombre: contenido)" submitLabel="Agregar" value="" onSubmit={(text: string) => add(text)} />
-              </Box>
-            )}
-            {!Input && list.tasks.length === 0 && <Text dimColor>No hay tareas pendientes.</Text>}
-          </Box>
-        )}
-      </Box>
-    )
-
     // "Actualizar rama", last of all and centered across the pane: a git pull
     // of the checked-out branch.
     const pulled = await read($, pull)
@@ -1910,7 +1635,7 @@ export const register: Register = on => {
 
     // Under the head, the project's health: one bar in the colors of what
     // waits, then each count as a chip. Only once a scan has a result.
-    const health = healthOf(state, found, list.tasks.length)
+    const health = healthOf(state, found)
     const healthStrip =
       state.status === 'done' || found.status === 'done' ? (
         <Box key="health" flexDirection="column" alignItems="center" marginTop={1}>
@@ -1960,7 +1685,6 @@ export const register: Register = on => {
           {vulnsSection}
           {vulnsOpen ? vulnsBody : null}
         </Box>
-        {todosSection}
         {pullSection}
       </Box>
     )

@@ -41,8 +41,8 @@ test('the section is colored by what most needs you, and its toggle names it', (
 })
 
 test('/narsil-check answers with its checks to anything but one it knows', () => {
-  expect(commandHelp('')).toBe('Narsil Check: revisiones del proyecto. /narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas. /narsil-check template "…": una tarea en Pendientes de una plantilla.')
-  expect(commandHelp('todo')).toBe('Narsil Check: no conozco "todo". Revisiones: /narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas. /narsil-check template "…": una tarea en Pendientes de una plantilla.')
+  expect(commandHelp('')).toBe('Narsil Check: revisiones del proyecto. /narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas.')
+  expect(commandHelp('todo')).toBe('Narsil Check: no conozco "todo". Revisiones: /narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas.')
 })
 
 // A project with one trivial upgrade, standing for the engine.
@@ -184,7 +184,7 @@ test('/narsil-check upgrade opens the pane, unfolded; anything else answers with
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await scanned($)
   const help = await $.command.run({ command: 'narsil-check', args: '', ...TYPED })
-  expect(help).toMatchObject({ text: 'Narsil Check: revisiones del proyecto. /narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas. /narsil-check template "…": una tarea en Pendientes de una plantilla.' })
+  expect(help).toMatchObject({ text: 'Narsil Check: revisiones del proyecto. /narsil-check upgrade: las librerías que se pueden actualizar. /narsil-check vulns: las vulnerabilidades conocidas.' })
 
   const ran = await $.command.run({ command: 'narsil-check', args: ' Upgrade ', ...TYPED })
   expect(ran).toMatchObject({ text: 'Narsil Check: revisando las librerías del proyecto.' })
@@ -199,15 +199,14 @@ test("the project's health counts each state that has any, most urgent first", (
   const scan = { status: 'done' as const, upgrades: [up('bump'), up('bump'), up('review'), up('blocked')], held: 0, checked: 9, failed: 0, at: 0, ecosystems: ['npm' as const] }
   const vuln = { id: 'GHSA-1', summary: 's', severity: 'high' as const, aliases: [] }
   const audit = { status: 'done' as const, findings: [{ name: 'qs', ecosystem: 'npm' as const, version: '1.0.0', isDirect: false, vulns: [vuln, { ...vuln, id: 'GHSA-2' }] }], checked: 9, at: 0 }
-  expect(healthOf(scan, audit as never, 1)).toEqual([
+  expect(healthOf(scan, audit as never)).toEqual([
     { label: 'vulnerabilidades', count: 2, color: PALETTE.error },
     { label: 'bloqueada', count: 1, color: PALETTE.error },
     { label: 'mayor', count: 1, color: PALETTE.waiting },
     { label: 'triviales', count: 2, color: PALETTE.done },
-    { label: 'pendiente', count: 1, color: PALETTE.muted },
   ])
   // Nothing read yet counts nothing.
-  expect(healthOf({ status: 'scanning' }, { status: 'scanning' } as never, 0)).toEqual([])
+  expect(healthOf({ status: 'scanning' }, { status: 'scanning' } as never)).toEqual([])
 })
 
 test('the health bar gives each state a share of one rounded bar, and an empty health is all green', () => {
@@ -231,7 +230,9 @@ test('each section is a panel bordered in the color of its state; the desktop ti
   let ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   // One trivial upgrade: the upgrade panel is green.
   expect((await ui.find({ type: 'Box', key: 'panel-upgrade' }))?.props).toMatchObject({ borderStyle: 'round', borderColor: PALETTE.done })
-  expect((await ui.find({ type: 'Box', key: 'panel-todos' }))?.props.borderColor).toBe(PALETTE.muted)
+  // Pendientes is gone: no panel of its own, and no field to add a task.
+  expect(await ui.find({ type: 'Box', key: 'panel-todos' })).toBeUndefined()
+  expect(await ui.findAll({ type: 'Input' })).toEqual([])
   const svgs = await ui.findAll({ type: 'Svg' })
   expect(svgs.map(s => s.props.alt)).toEqual(['Mapa mental. No hay nada en ejecución.', 'Salud del proyecto'])
   // Nothing has run: the map's panel is green, as a section with nothing waiting.

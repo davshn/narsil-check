@@ -1,7 +1,7 @@
 {
   "name": "narsil-check",
   "version": "1.12.1",
-  "description": "Narsil Check: a side pane in Narsil's colors with a live map of Claude's work, the session, library upgrades, known vulnerabilities and the project's pending tasks",
+  "description": "Narsil Check: a side pane in Narsil's colors with a live map of Claude's work, the session, library upgrades and known vulnerabilities",
   "author": {
     "name": "Davshn"
   },
